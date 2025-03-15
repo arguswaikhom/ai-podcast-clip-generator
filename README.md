@@ -64,3 +64,34 @@ python vertical_video_clipper.py input_video.mp4 --width 720 --height 1280
 - Processing time depends on the length and resolution of the input video
 - For best results, use videos where people are clearly visible
 - The tool works with various video formats supported by OpenCV 
+
+## Subtitle Generator
+
+This repository also includes a subtitle generator tool that can automatically create subtitles for your videos using OpenAI's Whisper speech recognition model.
+
+### Features
+
+- Batch process all videos in a folder
+- Skip videos that already have subtitles generated
+- Support for multiple video formats
+- SRT subtitle format output
+- Configurable Whisper model size
+
+### Usage
+
+```bash
+python subtitle_generator.py input_folder
+```
+
+This will process all videos in the specified folder and save the generated subtitles to a "subtitle_output" folder in the same directory as the script.
+
+### Optional arguments:
+
+- `--model`: Whisper model to use (choices: tiny, base, small, medium, large, default: base)
+- `--output_folder`: Custom path for subtitle output (default: subtitle_output)
+- `--extensions`: List of video file extensions to process (default: .mp4 .avi .mov .mkv .webm)
+
+Example with custom model and extensions:
+```bash
+python subtitle_generator.py videos_folder --model medium --extensions .mp4 .mov
+``` 

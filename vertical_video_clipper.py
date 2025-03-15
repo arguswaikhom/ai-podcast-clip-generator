@@ -290,7 +290,7 @@ def main():
         
         # Set default output directory to 'output' folder in the same directory as the script
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        output_dir = os.path.join(script_dir, "output")
+        output_dir = os.path.join(script_dir, "vertical_output")
         
         # Create output directory if it doesn't exist
         if not os.path.exists(output_dir):
