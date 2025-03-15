@@ -277,15 +277,43 @@ class VerticalVideoClipper:
 def main():
     parser = argparse.ArgumentParser(description="Convert landscape videos to vertical format with focus on people")
     parser.add_argument("input", help="Path to input video file")
-    parser.add_argument("output", help="Path to output video file")
+    parser.add_argument("--output", "-o", help="Path to output video file (optional)")
     parser.add_argument("--width", type=int, default=1080, help="Output width (default: 1080)")
     parser.add_argument("--height", type=int, default=1920, help="Output height (default: 1920)")
     args = parser.parse_args()
     
-    # Create output directory if it doesn't exist
-    output_dir = os.path.dirname(args.output)
-    if output_dir and not os.path.exists(output_dir):
-        os.makedirs(output_dir)
+    # If output is not specified, generate a default path
+    if args.output is None:
+        # Get the input filename without extension
+        input_basename = os.path.basename(args.input)
+        input_name, input_ext = os.path.splitext(input_basename)
+        
+        # Set default output directory to 'output' folder in the same directory as the script
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        output_dir = os.path.join(script_dir, "output")
+        
+        # Create output directory if it doesn't exist
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+        
+        # Default output filename
+        output_filename = f"{input_name}_vertical{input_ext}"
+        output_path = os.path.join(output_dir, output_filename)
+        
+        # Check if file already exists, append counter if needed
+        counter = 1
+        while os.path.exists(output_path):
+            output_filename = f"{input_name}_vertical_{counter}{input_ext}"
+            output_path = os.path.join(output_dir, output_filename)
+            counter += 1
+        
+        args.output = output_path
+        print(f"Output file not specified. Using: {args.output}")
+    else:
+        # Create output directory if it doesn't exist
+        output_dir = os.path.dirname(args.output)
+        if output_dir and not os.path.exists(output_dir):
+            os.makedirs(output_dir)
     
     # Process video
     start_time = time.time()

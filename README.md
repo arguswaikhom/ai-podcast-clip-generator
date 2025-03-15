@@ -29,17 +29,26 @@ pip install -r requirements.txt
 ## Usage
 
 ```bash
-python vertical_video_clipper.py input_video.mp4 output_video.mp4
+python vertical_video_clipper.py input_video.mp4
+```
+
+This will automatically create an "output" folder in the same directory as the script and save the processed video as "input_video_vertical.mp4". If a file with that name already exists, it will append a counter (like "input_video_vertical_1.mp4").
+
+If you want to specify a custom output location:
+
+```bash
+python vertical_video_clipper.py input_video.mp4 --output custom_output.mp4
 ```
 
 ### Optional arguments:
 
+- `--output`, `-o`: Path to output video file (optional)
 - `--width`: Width of the output video (default: 1080)
 - `--height`: Height of the output video (default: 1920)
 
 Example with custom dimensions:
 ```bash
-python vertical_video_clipper.py input_video.mp4 output_video.mp4 --width 720 --height 1280
+python vertical_video_clipper.py input_video.mp4 --width 720 --height 1280
 ```
 
 ## How It Works
