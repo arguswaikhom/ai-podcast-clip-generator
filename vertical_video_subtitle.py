@@ -6,6 +6,7 @@ import time
 import tempfile
 import subprocess
 import json
+import math
 from pathlib import Path
 from tqdm import tqdm
 from typing import Dict, List, Tuple, Optional
@@ -24,7 +25,7 @@ class SubtitleEntry:
         return f"SubtitleEntry({self.index}, {self.start_time:.2f}, {self.end_time:.2f}, '{self.text}')"
 
 class SubtitleProcessor:
-    def __init__(self, videos_folder: str, subtitles_folder: str, output_folder: str, highlight_words: bool = False):
+    def __init__(self, videos_folder: str, subtitles_folder: str, output_folder: str, highlight_style: str = None):
         """
         Initialize the SubtitleProcessor.
         
@@ -32,17 +33,20 @@ class SubtitleProcessor:
             videos_folder: Path to the folder containing video files
             subtitles_folder: Path to the folder containing subtitle files (.srt)
             output_folder: Path where the output videos with subtitles will be saved
-            highlight_words: Whether to highlight current words being spoken
+            highlight_style: Style of word highlighting ('standard', 'bigword', or None)
         """
         self.videos_folder = videos_folder
         self.subtitles_folder = subtitles_folder
         self.output_folder = output_folder
-        self.highlight_words = highlight_words
+        self.highlight_style = highlight_style
         
         # Create output directory if it doesn't exist
         if not os.path.exists(output_folder):
             os.makedirs(output_folder)
             print(f"Created output directory: {output_folder}")
+        
+        # For bounce animation timing
+        self.bounce_oscillator = 0
     
     def process_videos(self, video_extensions: List[str] = None):
         """
@@ -96,7 +100,7 @@ class SubtitleProcessor:
         
         # Check if there's a json file with word timings available
         word_timing_path = os.path.join(self.subtitles_folder, f"{base_name}_words.json")
-        if self.highlight_words and os.path.exists(word_timing_path):
+        if self.highlight_style and os.path.exists(word_timing_path):
             self._add_word_timings_to_subtitles(subtitles, word_timing_path)
         
         # Process video with subtitles
@@ -179,7 +183,10 @@ class SubtitleProcessor:
         current_time = 0
         
         # Calculate font scale based on video width (increased for larger text)
-        font_scale = width / 640  # Increased scale for bigger text
+        font_scale = width / 640  # Base scale for regular subtitles
+        
+        # Reset bounce oscillator for this video
+        self.bounce_oscillator = 0
         
         while cap.isOpened():
             ret, frame = cap.read()
@@ -189,13 +196,18 @@ class SubtitleProcessor:
             # Calculate current time in seconds
             current_time = frame_count / fps
             
+            # Update bounce oscillator - cycles every 0.6 seconds
+            self.bounce_oscillator = (self.bounce_oscillator + 1) % int(fps * 0.6)
+            
             # Find active subtitles for current time
             active_subtitle = self._get_active_subtitle(subtitles, current_time)
             
             # Add subtitle text to frame if there's an active subtitle
             if active_subtitle:
-                if self.highlight_words and active_subtitle.word_timings:
+                if self.highlight_style == 'standard' and active_subtitle.word_timings:
                     frame = self._add_highlighted_text_to_frame(frame, active_subtitle, current_time, font_scale)
+                elif self.highlight_style == 'bigword' and active_subtitle.word_timings:
+                    frame = self._add_big_word_to_frame(frame, active_subtitle, current_time, font_scale, fps)
                 else:
                     frame = self._add_text_to_frame(frame, active_subtitle.text, font_scale)
             
@@ -272,6 +284,78 @@ class SubtitleProcessor:
                 return subtitle
         
         return None
+    
+    def _add_big_word_to_frame(self, frame, subtitle: SubtitleEntry, current_time: float, font_scale: float, fps: float):
+        """
+        Add only the current word to the frame with large text and bouncing animation.
+        
+        Args:
+            frame: Input video frame
+            subtitle: Subtitle entry with word timings
+            current_time: Current time in seconds
+            font_scale: Base font scale factor
+            fps: Frames per second of the video
+            
+        Returns:
+            Frame with big word added
+        """
+        # Get frame dimensions
+        height, width, _ = frame.shape
+        
+        # Find current word
+        current_word = ""
+        word_progress = 0.0  # How far we are through the current word (0.0 to 1.0)
+        
+        for word_info in subtitle.word_timings:
+            if word_info['start'] <= current_time <= word_info['end']:
+                current_word = word_info['word']
+                word_duration = word_info['end'] - word_info['start']
+                if word_duration > 0:
+                    word_progress = (current_time - word_info['start']) / word_duration
+                break
+        
+        if not current_word:
+            return frame  # No current word to display
+        
+        # Set up font properties - much larger for the big word style
+        big_font_scale = font_scale * 2.5  # Much bigger than regular subtitles
+        font = cv2.FONT_HERSHEY_DUPLEX
+        thickness = max(2, int(big_font_scale * 2.5))  # Bold text
+        
+        # Calculate the bounce effect (subtle up and down movement)
+        bounce_height = 20 * font_scale  # Maximum bounce height in pixels
+        bounce_position = math.sin(self.bounce_oscillator / (fps * 0.6) * 2 * math.pi) * bounce_height
+        
+        # Get text dimensions
+        (text_width, text_height), _ = cv2.getTextSize(current_word, font, big_font_scale, thickness)
+        
+        # Position the word at 70% of the screen height with bounce effect
+        x_position = (width - text_width) // 2
+        y_position = int(height * 0.7) + int(bounce_position)
+        
+        # Draw background for better readability - rounded rectangle
+        background_padding = int(20 * font_scale)
+        background_rect = (
+            x_position - background_padding, 
+            y_position - text_height - background_padding,
+            text_width + 2 * background_padding,
+            text_height + 2 * background_padding
+        )
+        
+        # Draw rounded rectangle background
+        cv2.rectangle(
+            frame,
+            (background_rect[0], background_rect[1]),
+            (background_rect[0] + background_rect[2], background_rect[1] + background_rect[3]),
+            (0, 0, 0),
+            -1
+        )
+        
+        # Draw text with bright yellow color
+        text_color = (255, 255, 100)  # Bright yellow
+        cv2.putText(frame, current_word, (x_position, y_position), font, big_font_scale, text_color, thickness)
+        
+        return frame
     
     def _add_highlighted_text_to_frame(self, frame, subtitle: SubtitleEntry, current_time: float, font_scale: float):
         """
@@ -575,7 +659,8 @@ def main():
     parser.add_argument("subtitles_folder", help="Path to folder containing subtitle (.srt) files")
     parser.add_argument("--output_folder", help="Path to output folder (default: subtitle_video_output)",
                         default=None)
-    parser.add_argument("--highlight", action="store_true", help="Highlight current word being spoken")
+    parser.add_argument("--highlight", choices=["standard", "bigword"], 
+                        help="Highlighting style: 'standard' for highlighting within text, 'bigword' for showing only the current word in large text")
     parser.add_argument("--extensions", nargs="+", 
                         default=[".mp4", ".avi", ".mov", ".mkv", ".webm"],
                         help="Video file extensions to process (default: .mp4 .avi .mov .mkv .webm)")
@@ -593,7 +678,7 @@ def main():
         videos_folder=args.videos_folder,
         subtitles_folder=args.subtitles_folder,
         output_folder=output_folder,
-        highlight_words=args.highlight
+        highlight_style=args.highlight
     )
     
     # Process videos
