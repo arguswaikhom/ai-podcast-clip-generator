@@ -7,6 +7,7 @@ import random
 import time
 import subprocess
 import tempfile
+import glob
 from typing import Tuple, List, Dict, Optional
 
 class VerticalVideoClipper:
@@ -22,7 +23,7 @@ class VerticalVideoClipper:
         """
         self.input_file = input_file
         self.output_file = output_file
-        self.temp_video_file = os.path.join(tempfile.gettempdir(), "temp_vertical_video.mp4")
+        self.temp_video_file = os.path.join(tempfile.gettempdir(), f"temp_vertical_video_{int(time.time())}.mp4")
         self.output_width = width
         self.output_height = height
         
@@ -276,52 +277,86 @@ class VerticalVideoClipper:
 
 def main():
     parser = argparse.ArgumentParser(description="Convert landscape videos to vertical format with focus on people")
-    parser.add_argument("input", help="Path to input video file")
-    parser.add_argument("--output", "-o", help="Path to output video file (optional)")
+    parser.add_argument("input_folder", help="Path to folder containing input video files")
+    parser.add_argument("--output_folder", "-o", help="Path to output folder (optional)")
     parser.add_argument("--width", type=int, default=1080, help="Output width (default: 1080)")
     parser.add_argument("--height", type=int, default=1920, help="Output height (default: 1920)")
+    parser.add_argument("--extensions", nargs="+", default=[".mp4", ".avi", ".mov", ".mkv", ".webm"],
+                        help="Video file extensions to process (default: .mp4 .avi .mov .mkv .webm)")
     args = parser.parse_args()
     
-    # If output is not specified, generate a default path
-    if args.output is None:
-        # Get the input filename without extension
-        input_basename = os.path.basename(args.input)
-        input_name, input_ext = os.path.splitext(input_basename)
-        
-        # Set default output directory to 'output' folder in the same directory as the script
+    # Validate input folder
+    if not os.path.isdir(args.input_folder):
+        print(f"Error: Input folder '{args.input_folder}' does not exist or is not a directory.")
+        return
+    
+    # Set up output folder
+    if args.output_folder is None:
+        # Set default output directory to 'vertical_output' folder in the same directory as the script
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        output_dir = os.path.join(script_dir, "vertical_output")
-        
-        # Create output directory if it doesn't exist
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
+        output_folder = os.path.join(script_dir, "vertical_output")
+    else:
+        output_folder = args.output_folder
+    
+    # Create output directory if it doesn't exist
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+        print(f"Created output directory: {output_folder}")
+    
+    # Find all video files in the input folder
+    video_files = []
+    for ext in args.extensions:
+        pattern = os.path.join(args.input_folder, f"*{ext}")
+        video_files.extend(glob.glob(pattern))
+        # Also search for uppercase extensions
+        pattern = os.path.join(args.input_folder, f"*{ext.upper()}")
+        video_files.extend(glob.glob(pattern))
+    
+    if not video_files:
+        print(f"No video files found in {args.input_folder} with extensions {args.extensions}")
+        return
+    
+    print(f"Found {len(video_files)} video files to process:")
+    for i, video_file in enumerate(video_files):
+        print(f"  {i+1}. {os.path.basename(video_file)}")
+    
+    # Process each video file
+    total_start_time = time.time()
+    successful_videos = 0
+    
+    for video_file in video_files:
+        input_basename = os.path.basename(video_file)
+        input_name, input_ext = os.path.splitext(input_basename)
         
         # Default output filename
         output_filename = f"{input_name}_vertical{input_ext}"
-        output_path = os.path.join(output_dir, output_filename)
+        output_path = os.path.join(output_folder, output_filename)
         
         # Check if file already exists, append counter if needed
         counter = 1
         while os.path.exists(output_path):
             output_filename = f"{input_name}_vertical_{counter}{input_ext}"
-            output_path = os.path.join(output_dir, output_filename)
+            output_path = os.path.join(output_folder, output_filename)
             counter += 1
         
-        args.output = output_path
-        print(f"Output file not specified. Using: {args.output}")
-    else:
-        # Create output directory if it doesn't exist
-        output_dir = os.path.dirname(args.output)
-        if output_dir and not os.path.exists(output_dir):
-            os.makedirs(output_dir)
+        print(f"\nProcessing video {input_basename} -> {output_filename}")
+        
+        try:
+            # Process video
+            start_time = time.time()
+            clipper = VerticalVideoClipper(video_file, output_path, args.width, args.height)
+            clipper.process()
+            end_time = time.time()
+            
+            print(f"Processing completed in {end_time - start_time:.2f} seconds")
+            successful_videos += 1
+        except Exception as e:
+            print(f"Error processing video {input_basename}: {str(e)}")
     
-    # Process video
-    start_time = time.time()
-    clipper = VerticalVideoClipper(args.input, args.output, args.width, args.height)
-    clipper.process()
-    end_time = time.time()
-    
-    print(f"Processing completed in {end_time - start_time:.2f} seconds")
+    total_end_time = time.time()
+    print(f"\nAll processing completed in {total_end_time - total_start_time:.2f} seconds")
+    print(f"Successfully processed {successful_videos} out of {len(video_files)} videos.")
+    print(f"Output files are in: {output_folder}")
 
 if __name__ == "__main__":
     main()
