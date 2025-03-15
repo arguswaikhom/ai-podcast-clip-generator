@@ -1,5 +1,4 @@
 import cv2
-import numpy as np
 import mediapipe as mp
 import argparse
 import os
@@ -8,7 +7,7 @@ import time
 import subprocess
 import tempfile
 import glob
-from typing import Tuple, List, Dict, Optional
+from typing import Tuple, Optional
 
 class VerticalVideoClipper:
     def __init__(self, input_file: str, output_file: str, width: int = 1080, height: int = 1920):

@@ -7,9 +7,8 @@ import tempfile
 import subprocess
 import json
 import math
-from pathlib import Path
 from tqdm import tqdm
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Optional
 
 class SubtitleEntry:
     """Class representing a single subtitle entry."""

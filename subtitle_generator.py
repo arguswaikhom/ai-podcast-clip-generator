@@ -2,10 +2,8 @@ import os
 import argparse
 import whisper
 import time
-import re
 import json
 from tqdm import tqdm
-from pathlib import Path
 
 class SubtitleGenerator:
     def __init__(self, model_name="base", max_words_per_subtitle=12):
