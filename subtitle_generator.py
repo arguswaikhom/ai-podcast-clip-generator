@@ -3,6 +3,7 @@ import argparse
 import whisper
 import time
 import re
+import json
 from tqdm import tqdm
 from pathlib import Path
 
@@ -20,13 +21,14 @@ class SubtitleGenerator:
         self.max_words_per_subtitle = max_words_per_subtitle
         print("Model loaded successfully.")
     
-    def generate_subtitle(self, video_path, output_path):
+    def generate_subtitle(self, video_path, output_path, generate_word_timings=False):
         """
         Generate subtitles for a video file using Whisper.
         
         Args:
             video_path: Path to the input video file
             output_path: Path where the subtitle file will be saved
+            generate_word_timings: Whether to generate a JSON file with word timings
         
         Returns:
             bool: True if subtitles were generated successfully, False otherwise
@@ -53,6 +55,10 @@ class SubtitleGenerator:
                     srt_file.write(f"{start_time} --> {end_time}\n")
                     srt_file.write(f"{segment['text'].strip()}\n\n")
             
+            # Generate word-level timing JSON if requested
+            if generate_word_timings:
+                self._generate_word_timing_json(result, output_path)
+            
             print(f"Subtitle generated successfully: {output_path}")
             return True
             
@@ -62,6 +68,64 @@ class SubtitleGenerator:
             if "ffmpeg" in str(e).lower() or "pipe" in str(e).lower():
                 print("This appears to be an FFmpeg error. Make sure FFmpeg is installed correctly and the video file is valid.")
             return False
+    
+    def _generate_word_timing_json(self, result, srt_path):
+        """
+        Generate a JSON file with word-level timing information.
+        
+        Args:
+            result: Whisper transcription result
+            srt_path: Path to the SRT file (used to determine JSON file path)
+        """
+        try:
+            # Create a path for the JSON file
+            json_path = os.path.splitext(srt_path)[0] + "_words.json"
+            
+            # Extract word timing information
+            word_data = {"words": []}
+            
+            # Try to extract word-level timing from segments
+            for segment in result["segments"]:
+                segment_text = segment["text"].strip()
+                segment_start = segment["start"]
+                segment_end = segment["end"]
+                segment_duration = segment_end - segment_start
+                
+                # Split into words and estimate timing
+                words = segment_text.split()
+                if len(words) == 0:
+                    continue
+                    
+                # If we have word-level timestamps (available in newer Whisper versions)
+                if "words" in segment and segment["words"]:
+                    for word_info in segment["words"]:
+                        if "word" in word_info and "start" in word_info and "end" in word_info:
+                            word_data["words"].append({
+                                "word": word_info["word"],
+                                "start": word_info["start"],
+                                "end": word_info["end"]
+                            })
+                else:
+                    # Estimate word timing based on segment duration
+                    word_duration = segment_duration / len(words)
+                    for i, word in enumerate(words):
+                        word_start = segment_start + (i * word_duration)
+                        word_end = word_start + word_duration
+                        
+                        word_data["words"].append({
+                            "word": word,
+                            "start": word_start,
+                            "end": word_end
+                        })
+            
+            # Save to JSON file
+            with open(json_path, 'w', encoding='utf-8') as f:
+                json.dump(word_data, f, indent=2)
+                
+            print(f"Word timing data saved to: {json_path}")
+                
+        except Exception as e:
+            print(f"Error generating word timing data: {str(e)}")
     
     def _refine_segments(self, result):
         """
@@ -142,8 +206,10 @@ def main():
                         default="base", help="Whisper model to use (default: base)")
     parser.add_argument("--output_folder", help="Path to output folder for subtitles (default: subtitle_output)",
                         default=None)
-    parser.add_argument("--max_words", type=int, default=12,
+    parser.add_argument("--max_words", type=int, default=8,
                         help="Maximum number of words per subtitle (default: 12)")
+    parser.add_argument("--word_timings", action="store_true",
+                        help="Generate word-level timing data for highlighting")
     parser.add_argument("--extensions", nargs="+", 
                         default=[".mp4", ".avi", ".mov", ".mkv", ".webm"],
                         help="Video file extensions to process (default: .mp4 .avi .mov .mkv .webm)")
@@ -190,7 +256,7 @@ def main():
             continue
         
         # Generate subtitle
-        subtitle_generator.generate_subtitle(video_path, subtitle_path)
+        subtitle_generator.generate_subtitle(video_path, subtitle_path, generate_word_timings=args.word_timings)
     
     print("Subtitle generation completed.")
 

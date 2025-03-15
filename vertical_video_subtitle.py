@@ -5,23 +5,26 @@ import re
 import time
 import tempfile
 import subprocess
+import json
 from pathlib import Path
 from tqdm import tqdm
 from typing import Dict, List, Tuple, Optional
 
 class SubtitleEntry:
     """Class representing a single subtitle entry."""
-    def __init__(self, index: int, start_time: float, end_time: float, text: str):
+    def __init__(self, index: int, start_time: float, end_time: float, text: str, word_timings: List[Dict] = None):
         self.index = index
         self.start_time = start_time
         self.end_time = end_time
         self.text = text
+        # Word timings is a list of dictionaries with word, start, end times
+        self.word_timings = word_timings or []
 
     def __repr__(self):
         return f"SubtitleEntry({self.index}, {self.start_time:.2f}, {self.end_time:.2f}, '{self.text}')"
 
 class SubtitleProcessor:
-    def __init__(self, videos_folder: str, subtitles_folder: str, output_folder: str):
+    def __init__(self, videos_folder: str, subtitles_folder: str, output_folder: str, highlight_words: bool = False):
         """
         Initialize the SubtitleProcessor.
         
@@ -29,10 +32,12 @@ class SubtitleProcessor:
             videos_folder: Path to the folder containing video files
             subtitles_folder: Path to the folder containing subtitle files (.srt)
             output_folder: Path where the output videos with subtitles will be saved
+            highlight_words: Whether to highlight current words being spoken
         """
         self.videos_folder = videos_folder
         self.subtitles_folder = subtitles_folder
         self.output_folder = output_folder
+        self.highlight_words = highlight_words
         
         # Create output directory if it doesn't exist
         if not os.path.exists(output_folder):
@@ -89,12 +94,56 @@ class SubtitleProcessor:
             print(f"No valid subtitles found in {subtitle_path}, skipping.")
             return
         
+        # Check if there's a json file with word timings available
+        word_timing_path = os.path.join(self.subtitles_folder, f"{base_name}_words.json")
+        if self.highlight_words and os.path.exists(word_timing_path):
+            self._add_word_timings_to_subtitles(subtitles, word_timing_path)
+        
         # Process video with subtitles
         try:
             self._process_video_with_subtitles(video_path, subtitles)
             print(f"Successfully processed video: {video_name}")
         except Exception as e:
             print(f"Error processing video {video_name}: {str(e)}")
+    
+    def _add_word_timings_to_subtitles(self, subtitles: List[SubtitleEntry], word_timing_path: str):
+        """
+        Add word-level timings to subtitle entries from a JSON file.
+        
+        Args:
+            subtitles: List of subtitle entries
+            word_timing_path: Path to JSON file with word timings
+        """
+        try:
+            with open(word_timing_path, 'r', encoding='utf-8') as f:
+                word_data = json.load(f)
+            
+            if 'words' not in word_data:
+                print(f"Invalid word timing format in {word_timing_path}")
+                return
+            
+            # Group words by subtitle segments
+            for subtitle in subtitles:
+                subtitle.word_timings = []
+                
+                # Find words that fall within this subtitle's time range
+                for word_info in word_data['words']:
+                    word_start = word_info.get('start', 0)
+                    word_end = word_info.get('end', 0)
+                    word_text = word_info.get('word', '')
+                    
+                    # If word overlaps with subtitle timing, add it
+                    if (word_start >= subtitle.start_time and word_start < subtitle.end_time) or \
+                       (word_end > subtitle.start_time and word_end <= subtitle.end_time) or \
+                       (word_start <= subtitle.start_time and word_end >= subtitle.end_time):
+                        subtitle.word_timings.append({
+                            'word': word_text,
+                            'start': word_start,
+                            'end': word_end
+                        })
+                
+        except Exception as e:
+            print(f"Error loading word timings from {word_timing_path}: {str(e)}")
     
     def _process_video_with_subtitles(self, video_path: str, subtitles: List[SubtitleEntry]):
         """
@@ -141,11 +190,14 @@ class SubtitleProcessor:
             current_time = frame_count / fps
             
             # Find active subtitles for current time
-            active_text = self._get_active_subtitle_text(subtitles, current_time)
+            active_subtitle = self._get_active_subtitle(subtitles, current_time)
             
-            # Add subtitle text to frame if there's active text
-            if active_text:
-                frame = self._add_text_to_frame(frame, active_text, font_scale)
+            # Add subtitle text to frame if there's an active subtitle
+            if active_subtitle:
+                if self.highlight_words and active_subtitle.word_timings:
+                    frame = self._add_highlighted_text_to_frame(frame, active_subtitle, current_time, font_scale)
+                else:
+                    frame = self._add_text_to_frame(frame, active_subtitle.text, font_scale)
             
             # Write the frame to output video
             out.write(frame)
@@ -204,22 +256,153 @@ class SubtitleProcessor:
             if os.path.exists(subtitle_video):
                 os.rename(subtitle_video, output_video)
     
-    def _get_active_subtitle_text(self, subtitles: List[SubtitleEntry], current_time: float) -> str:
+    def _get_active_subtitle(self, subtitles: List[SubtitleEntry], current_time: float) -> Optional[SubtitleEntry]:
         """
-        Get the text of active subtitles at the current time.
+        Get the subtitle entry active at the current time.
         
         Args:
             subtitles: List of subtitle entries
             current_time: Current time in the video (seconds)
             
         Returns:
-            Active subtitle text or empty string if no active subtitle
+            Active subtitle entry or None if no active subtitle
         """
         for subtitle in subtitles:
             if subtitle.start_time <= current_time <= subtitle.end_time:
-                return subtitle.text
+                return subtitle
         
-        return ""
+        return None
+    
+    def _add_highlighted_text_to_frame(self, frame, subtitle: SubtitleEntry, current_time: float, font_scale: float):
+        """
+        Add subtitle text to a frame with the current word highlighted.
+        
+        Args:
+            frame: Input video frame
+            subtitle: Subtitle entry with word timings
+            current_time: Current time in seconds
+            font_scale: Font scale factor
+            
+        Returns:
+            Frame with highlighted subtitle text
+        """
+        # Get frame dimensions
+        height, width, _ = frame.shape
+        
+        # Set text properties
+        font = cv2.FONT_HERSHEY_DUPLEX
+        thickness = max(1, int(font_scale * 2))  # Scale thickness with font size
+        regular_color = (255, 255, 255)  # White for regular text
+        highlight_color = (255, 255, 0)  # Yellow for highlighted word
+        
+        # Prepare text with highlighted word
+        # First, build the full text with markers for the currently spoken word
+        full_text = subtitle.text
+        highlighted_word = ""
+        
+        # Find which word should be highlighted based on timing
+        for word_info in subtitle.word_timings:
+            if word_info['start'] <= current_time <= word_info['end']:
+                highlighted_word = word_info['word']
+                break
+        
+        # If no word is currently being spoken, just render the regular text
+        if not highlighted_word:
+            return self._add_text_to_frame(frame, full_text, font_scale)
+        
+        # Split text into words for rendering
+        words = full_text.split()
+        
+        # Calculate position (at 70% of video height)
+        line_height = int(50 * font_scale)  # Increased for better spacing with larger text
+        
+        # Measure total text width for centering
+        total_text_width = 0
+        word_widths = []
+        
+        for word in words:
+            (text_width, _), _ = cv2.getTextSize(word, font, font_scale, thickness)
+            word_widths.append(text_width)
+            total_text_width += text_width
+            # Add space width
+            space_width = int(text_width * 0.3)  # Approximate space width as 30% of word width
+            if total_text_width > 0:  # Don't add space before first word
+                total_text_width += space_width
+        
+        # Position text at approximately 70% of frame height
+        y_position = int(height * 0.7)
+        
+        # Wrap the subtitle text over multiple lines if it's too wide
+        wrapped_lines = []
+        current_line = []
+        current_line_width = 0
+        max_line_width = width - 100  # Leave margin
+        
+        for i, word in enumerate(words):
+            # Calculate width with space
+            word_width = word_widths[i]
+            space_width = int(word_width * 0.3) if i > 0 else 0
+            
+            # Check if adding this word would make line too long
+            if current_line_width + word_width + space_width > max_line_width and current_line:
+                wrapped_lines.append(current_line)
+                current_line = [word]
+                current_line_width = word_width
+            else:
+                current_line.append(word)
+                current_line_width += word_width + space_width
+        
+        # Add the last line if it has content
+        if current_line:
+            wrapped_lines.append(current_line)
+        
+        # Limit to 3 lines maximum
+        if len(wrapped_lines) > 3:
+            wrapped_lines = wrapped_lines[:3]
+            # Add ellipsis to last line if it's not the end
+            if len(wrapped_lines[-1]) > 1:
+                wrapped_lines[-1][-1] += "..."
+        
+        # Calculate total height of all lines
+        total_text_height = line_height * len(wrapped_lines)
+        y_start = y_position - (total_text_height // 2)
+        
+        # Render each line
+        for line_idx, line_words in enumerate(wrapped_lines):
+            # Calculate line width for centering
+            line_width = sum(word_widths[words.index(word)] for word in line_words) + \
+                        sum(int(word_widths[words.index(word)] * 0.3) for word in line_words[1:])
+            
+            x_start = (width - line_width) // 2
+            current_x = x_start
+            line_y = y_start + (line_idx * line_height) + 30
+            
+            # Render each word in the line
+            for word in line_words:
+                # Get word width
+                word_idx = words.index(word)
+                word_width = word_widths[word_idx]
+                
+                # Determine if this word should be highlighted
+                is_highlighted = word.strip('.,?!:;') == highlighted_word.strip('.,?!:;')
+                word_color = highlight_color if is_highlighted else regular_color
+                
+                # Draw black outline/background
+                for offset_x in [-2, -1, 0, 1, 2]:
+                    for offset_y in [-2, -1, 0, 1, 2]:
+                        if offset_x != 0 or offset_y != 0:
+                            cv2.putText(frame, word, 
+                                       (current_x + offset_x, line_y + offset_y), 
+                                       font, font_scale, (0, 0, 0), thickness + 1)
+                
+                # Draw text with appropriate color
+                cv2.putText(frame, word, (current_x, line_y), font, font_scale, word_color, thickness)
+                
+                # Move x position for next word
+                space_width = int(word_width * 0.3)
+                current_x += word_width + space_width
+        
+        return frame
     
     def _add_text_to_frame(self, frame, text: str, font_scale: float):
         """
@@ -392,6 +575,7 @@ def main():
     parser.add_argument("subtitles_folder", help="Path to folder containing subtitle (.srt) files")
     parser.add_argument("--output_folder", help="Path to output folder (default: subtitle_video_output)",
                         default=None)
+    parser.add_argument("--highlight", action="store_true", help="Highlight current word being spoken")
     parser.add_argument("--extensions", nargs="+", 
                         default=[".mp4", ".avi", ".mov", ".mkv", ".webm"],
                         help="Video file extensions to process (default: .mp4 .avi .mov .mkv .webm)")
@@ -408,7 +592,8 @@ def main():
     processor = SubtitleProcessor(
         videos_folder=args.videos_folder,
         subtitles_folder=args.subtitles_folder,
-        output_folder=output_folder
+        output_folder=output_folder,
+        highlight_words=args.highlight
     )
     
     # Process videos
