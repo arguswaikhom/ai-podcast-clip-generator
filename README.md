@@ -94,4 +94,34 @@ This will process all videos in the specified folder and save the generated subt
 Example with custom model and extensions:
 ```bash
 python subtitle_generator.py videos_folder --model medium --extensions .mp4 .mov
+```
+
+## Subtitle Video Creator
+
+This repository also includes a tool to embed subtitles directly onto videos. This creates new videos with the subtitles "burned in" rather than as separate subtitle files.
+
+### Features
+
+- Match videos with their corresponding subtitle files
+- Embed readable subtitles in the bottom half of the video
+- Automatically format and wrap text to fit the video width
+- Add black outline to text for better readability on any background
+- Skip videos that don't have matching subtitle files
+
+### Usage
+
+```bash
+python vertical_video_subtitle.py videos_folder subtitles_folder
+```
+
+This will take all videos from the videos folder, find their matching subtitles in the subtitles folder, and create new videos with subtitles embedded. The output will be saved to a "subtitle_video_output" folder.
+
+### Optional arguments:
+
+- `--output_folder`: Custom path for output videos with subtitles (default: subtitle_video_output)
+- `--extensions`: List of video file extensions to process (default: .mp4 .avi .mov .mkv .webm)
+
+Example with custom output folder:
+```bash
+python vertical_video_subtitle.py videos_folder subtitles_folder --output_folder custom_output
 ``` 
