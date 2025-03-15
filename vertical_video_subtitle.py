@@ -25,7 +25,7 @@ class SubtitleEntry:
         return f"SubtitleEntry({self.index}, {self.start_time:.2f}, {self.end_time:.2f}, '{self.text}')"
 
 class SubtitleProcessor:
-    def __init__(self, videos_folder: str, subtitles_folder: str, output_folder: str, highlight_style: str = None):
+    def __init__(self, videos_folder: str, subtitles_folder: str, output_folder: str, highlight_style: str = None, animation_style: str = "bounce"):
         """
         Initialize the SubtitleProcessor.
         
@@ -34,19 +34,21 @@ class SubtitleProcessor:
             subtitles_folder: Path to the folder containing subtitle files (.srt)
             output_folder: Path where the output videos with subtitles will be saved
             highlight_style: Style of word highlighting ('standard', 'bigword', or None)
+            animation_style: Animation style for bigword mode ('bounce' or 'scale')
         """
         self.videos_folder = videos_folder
         self.subtitles_folder = subtitles_folder
         self.output_folder = output_folder
         self.highlight_style = highlight_style
+        self.animation_style = animation_style
         
         # Create output directory if it doesn't exist
         if not os.path.exists(output_folder):
             os.makedirs(output_folder)
             print(f"Created output directory: {output_folder}")
         
-        # For bounce animation timing
-        self.bounce_oscillator = 0
+        # For animations
+        self.animation_oscillator = 0
     
     def process_videos(self, video_extensions: List[str] = None):
         """
@@ -185,8 +187,12 @@ class SubtitleProcessor:
         # Calculate font scale based on video width (increased for larger text)
         font_scale = width / 640  # Base scale for regular subtitles
         
-        # Reset bounce oscillator for this video
-        self.bounce_oscillator = 0
+        # Reset animation oscillator for this video
+        self.animation_oscillator = 0
+        
+        # Define animation cycle - use a slightly longer cycle for scale animation
+        bounce_cycle = int(fps * 0.6)  # 0.6 seconds for bounce
+        scale_cycle = int(fps * 1.2)   # 1.2 seconds for scale (slower)
         
         while cap.isOpened():
             ret, frame = cap.read()
@@ -196,8 +202,11 @@ class SubtitleProcessor:
             # Calculate current time in seconds
             current_time = frame_count / fps
             
-            # Update bounce oscillator - cycles every 0.6 seconds
-            self.bounce_oscillator = (self.bounce_oscillator + 1) % int(fps * 0.6)
+            # Update animation oscillator based on the animation style
+            if self.animation_style == "bounce":
+                self.animation_oscillator = (self.animation_oscillator + 1) % bounce_cycle
+            else:  # scale
+                self.animation_oscillator = (self.animation_oscillator + 1) % scale_cycle
             
             # Find active subtitles for current time
             active_subtitle = self._get_active_subtitle(subtitles, current_time)
@@ -287,7 +296,7 @@ class SubtitleProcessor:
     
     def _add_big_word_to_frame(self, frame, subtitle: SubtitleEntry, current_time: float, font_scale: float, fps: float):
         """
-        Add only the current word to the frame with large text and bouncing animation.
+        Add only the current word to the frame with large text and animation.
         
         Args:
             frame: Input video frame
@@ -320,40 +329,95 @@ class SubtitleProcessor:
         # Set up font properties - much larger for the big word style
         big_font_scale = font_scale * 2.5  # Much bigger than regular subtitles
         font = cv2.FONT_HERSHEY_DUPLEX
-        thickness = max(2, int(big_font_scale * 2.5))  # Bold text
         
-        # Calculate the bounce effect (subtle up and down movement)
-        bounce_height = 20 * font_scale  # Maximum bounce height in pixels
-        bounce_position = math.sin(self.bounce_oscillator / (fps * 0.6) * 2 * math.pi) * bounce_height
-        
-        # Get text dimensions
-        (text_width, text_height), _ = cv2.getTextSize(current_word, font, big_font_scale, thickness)
-        
-        # Position the word at 70% of the screen height with bounce effect
-        x_position = (width - text_width) // 2
-        y_position = int(height * 0.7) + int(bounce_position)
-        
-        # Draw background for better readability - rounded rectangle
-        background_padding = int(20 * font_scale)
-        background_rect = (
-            x_position - background_padding, 
-            y_position - text_height - background_padding,
-            text_width + 2 * background_padding,
-            text_height + 2 * background_padding
-        )
-        
-        # Draw rounded rectangle background
-        cv2.rectangle(
-            frame,
-            (background_rect[0], background_rect[1]),
-            (background_rect[0] + background_rect[2], background_rect[1] + background_rect[3]),
-            (0, 0, 0),
-            -1
-        )
-        
-        # Draw text with bright yellow color
-        text_color = (255, 255, 100)  # Bright yellow
-        cv2.putText(frame, current_word, (x_position, y_position), font, big_font_scale, text_color, thickness)
+        # Apply animations based on selected style
+        if self.animation_style == "bounce":
+            # Bounce animation
+            # Calculate the bounce effect (subtle up and down movement)
+            bounce_cycle = int(fps * 0.6)
+            bounce_height = 20 * font_scale  # Maximum bounce height in pixels
+            bounce_position = math.sin(self.animation_oscillator / bounce_cycle * 2 * math.pi) * bounce_height
+            
+            # Animation parameters
+            thickness = max(2, int(big_font_scale * 2.5))  # Bold text
+            final_font_scale = big_font_scale  # No scaling in bounce mode
+            y_offset = int(bounce_position)
+            
+            # Get text dimensions
+            (text_width, text_height), _ = cv2.getTextSize(current_word, font, final_font_scale, thickness)
+            
+            # Position the word at 70% of the screen height with bounce effect
+            x_position = (width - text_width) // 2
+            y_position = int(height * 0.7) + y_offset
+            
+            # Draw background for better readability - rounded rectangle
+            background_padding = int(20 * font_scale)
+            background_rect = (
+                x_position - background_padding, 
+                y_position - text_height - background_padding,
+                text_width + 2 * background_padding,
+                text_height + 2 * background_padding
+            )
+            
+            # Draw rounded rectangle background
+            cv2.rectangle(
+                frame,
+                (background_rect[0], background_rect[1]),
+                (background_rect[0] + background_rect[2], background_rect[1] + background_rect[3]),
+                (0, 0, 0),
+                -1
+            )
+            
+            # Draw text with bright yellow color
+            text_color = (255, 255, 100)  # Bright yellow
+            cv2.putText(frame, current_word, (x_position, y_position), font, final_font_scale, text_color, thickness)
+            
+        else:  # "scale" animation
+            # Scale animation
+            scale_cycle = int(fps * 1.2)  # Slowed down to 1.2 seconds
+            scale_factor = 0.9 + 0.1 * math.sin(self.animation_oscillator / scale_cycle * math.pi) ** 2  # Range from 0.9 to 1.0
+            
+            # Animation parameters
+            final_font_scale = big_font_scale * scale_factor
+            thickness = max(2, int(final_font_scale * 1.5))  # Thinner for scale mode
+            y_offset = 0  # No vertical movement in scale mode
+            
+            # Get text dimensions for current scale
+            (text_width, text_height), _ = cv2.getTextSize(current_word, font, final_font_scale, thickness)
+            
+            # Position the word at 70% of the screen height
+            x_position = (width - text_width) // 2
+            y_position = int(height * 0.7)
+            
+            # Draw text with black outline (no background)
+            text_color = (230, 230, 100)  # Light yellow
+            outline_color = (0, 0, 0)  # Black outline
+            
+            # Draw the outline (thicker for better visibility)
+            outline_thickness = thickness + 2
+            for offset_x in [-2, -1, 0, 1, 2]:
+                for offset_y in [-2, -1, 0, 1, 2]:
+                    if offset_x != 0 or offset_y != 0:
+                        cv2.putText(
+                            frame, 
+                            current_word, 
+                            (x_position + offset_x, y_position + offset_y), 
+                            font, 
+                            final_font_scale, 
+                            outline_color, 
+                            outline_thickness
+                        )
+            
+            # Draw the text
+            cv2.putText(
+                frame, 
+                current_word, 
+                (x_position, y_position), 
+                font, 
+                final_font_scale, 
+                text_color, 
+                thickness
+            )
         
         return frame
     
@@ -661,6 +725,8 @@ def main():
                         default=None)
     parser.add_argument("--highlight", choices=["standard", "bigword"], 
                         help="Highlighting style: 'standard' for highlighting within text, 'bigword' for showing only the current word in large text")
+    parser.add_argument("--animation", choices=["bounce", "scale"], default="bounce",
+                        help="Animation style for bigword mode: 'bounce' for bouncing animation, 'scale' for scaling animation (default: bounce)")
     parser.add_argument("--extensions", nargs="+", 
                         default=[".mp4", ".avi", ".mov", ".mkv", ".webm"],
                         help="Video file extensions to process (default: .mp4 .avi .mov .mkv .webm)")
@@ -678,7 +744,8 @@ def main():
         videos_folder=args.videos_folder,
         subtitles_folder=args.subtitles_folder,
         output_folder=output_folder,
-        highlight_style=args.highlight
+        highlight_style=args.highlight,
+        animation_style=args.animation
     )
     
     # Process videos
