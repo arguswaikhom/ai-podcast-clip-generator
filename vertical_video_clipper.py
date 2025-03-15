@@ -5,6 +5,8 @@ import argparse
 import os
 import random
 import time
+import subprocess
+import tempfile
 from typing import Tuple, List, Dict, Optional
 
 class VerticalVideoClipper:
@@ -20,6 +22,7 @@ class VerticalVideoClipper:
         """
         self.input_file = input_file
         self.output_file = output_file
+        self.temp_video_file = os.path.join(tempfile.gettempdir(), "temp_vertical_video.mp4")
         self.output_width = width
         self.output_height = height
         
@@ -44,27 +47,36 @@ class VerticalVideoClipper:
             min_tracking_confidence=0.5
         )
         
+        # Calculate crop dimensions while maintaining aspect ratio
+        # First determine the vertical crop height (same as input height)
+        self.crop_height = self.input_height
+        
+        # Calculate the width needed to maintain 9:16 aspect ratio
+        self.crop_width = int(self.crop_height * (self.output_width / self.output_height))
+        
+        # If calculated crop width is larger than input width, adjust both dimensions
+        if self.crop_width > self.input_width:
+            self.crop_width = self.input_width
+            self.crop_height = int(self.crop_width * (self.output_height / self.output_width))
+            
         # Initialize video writer
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         self.out = cv2.VideoWriter(
-            output_file, fourcc, self.fps, (self.output_width, self.output_height)
+            self.temp_video_file, fourcc, self.fps, (self.output_width, self.output_height)
         )
         
         # Variables for smooth camera movement
-        self.crop_width = int(self.input_height * (self.output_width / self.output_height))
-        self.crop_height = self.input_height
         self.last_crop_x = (self.input_width - self.crop_width) // 2  # Start in the middle
-        self.transition_frames = 0
+        self.last_crop_y = (self.input_height - self.crop_height) // 2  # Start in the middle if needed
         
-        # Variables for zoom effect
+        # Variables for zoom effect (reduced amplitude)
         self.zoom_state = "neutral"  # neutral, zooming_in, zooming_out
         self.zoom_factor = 1.0
-        self.zoom_direction = 0
         self.zoom_duration = 0
         self.zoom_step = 0
         self.frames_since_last_zoom = 0
         self.min_zoom = 1.0
-        self.max_zoom = 1.2
+        self.max_zoom = 1.1  # Reduced from 1.2 to 1.1 for subtler effect
         
     def detect_person(self, frame) -> Optional[Tuple[int, int]]:
         """
@@ -98,26 +110,31 @@ class VerticalVideoClipper:
                 
         return None
     
-    def apply_zoom_effect(self, crop_x: int, crop_width: int) -> Tuple[int, int]:
+    def apply_zoom_effect(self, crop_x: int, crop_y: int, crop_width: int, crop_height: int) -> Tuple[int, int, int, int]:
         """
-        Apply zoom effects to make the video more dynamic.
+        Apply zoom effects to make the video more dynamic, but with reduced intensity.
         
         Args:
             crop_x: Current crop x position
+            crop_y: Current crop y position
             crop_width: Current crop width
+            crop_height: Current crop height
             
         Returns:
-            Tuple of (new_crop_x, new_crop_width)
+            Tuple of (new_crop_x, new_crop_y, new_crop_width, new_crop_height)
         """
-        # Update zoom
+        # Update zoom state with less frequent changes
         if self.zoom_state == "neutral":
             self.frames_since_last_zoom += 1
             
-            # Randomly start a new zoom after a certain period
-            if self.frames_since_last_zoom > random.randint(60, 180):  # 2-6 seconds at 30fps
+            # Randomly start a new zoom after a longer period (reduced frequency)
+            if self.frames_since_last_zoom > random.randint(120, 300):  # Increased from 60-180 to 120-300
                 self.zoom_state = random.choice(["zooming_in", "zooming_out"])
-                self.zoom_duration = random.randint(90, 150)  # 3-5 seconds
-                self.zoom_step = (random.uniform(0.1, 0.15) if self.zoom_state == "zooming_in" else -random.uniform(0.05, 0.1)) / self.zoom_duration
+                self.zoom_duration = random.randint(150, 210)  # Increased duration for smoother effect
+                
+                # Reduced zoom step for less dramatic movement
+                self.zoom_step = (random.uniform(0.05, 0.08) if self.zoom_state == "zooming_in" 
+                                 else -random.uniform(0.03, 0.05)) / self.zoom_duration
                 self.frames_since_last_zoom = 0
                 
         elif self.zoom_state == "zooming_in":
@@ -138,16 +155,27 @@ class VerticalVideoClipper:
                 self.zoom_factor = max(self.zoom_factor, self.min_zoom)
                 self.frames_since_last_zoom = 0
         
-        # Apply zoom effect
+        # Apply zoom effect while maintaining aspect ratio
         adjusted_crop_width = int(crop_width / self.zoom_factor)
-        adjusted_crop_x = crop_x + (crop_width - adjusted_crop_width) // 2
+        adjusted_crop_height = int(crop_height / self.zoom_factor)
         
-        return adjusted_crop_x, adjusted_crop_width
+        # Ensure we maintain the correct aspect ratio
+        aspect_ratio = self.output_width / self.output_height
+        if adjusted_crop_width / adjusted_crop_height != aspect_ratio:
+            # Recalculate to maintain aspect ratio
+            adjusted_crop_width = int(adjusted_crop_height * aspect_ratio)
+        
+        # Center the zoom
+        adjusted_crop_x = crop_x + (crop_width - adjusted_crop_width) // 2
+        adjusted_crop_y = crop_y + (crop_height - adjusted_crop_height) // 2
+        
+        return adjusted_crop_x, adjusted_crop_y, adjusted_crop_width, adjusted_crop_height
     
     def process(self):
-        """Process the input video and create a vertical video output."""
+        """Process the input video and create a vertical video output with audio."""
         frame_count = 0
         target_x = self.last_crop_x  # Start with center crop
+        target_y = self.last_crop_y
         
         while self.cap.isOpened():
             ret, frame = self.cap.read()
@@ -163,27 +191,36 @@ class VerticalVideoClipper:
             
             if person_center:
                 # Calculate the target x position for cropping
-                center_x, _ = person_center
+                center_x, center_y = person_center
                 
                 # Make sure we don't go out of bounds with the crop
                 max_x = self.input_width - self.crop_width
+                max_y = self.input_height - self.crop_height
                 target_x = max(0, min(max_x, center_x - self.crop_width // 2))
+                target_y = max(0, min(max_y, center_y - self.crop_height // 2))
             
-            # Apply smooth transition to target position
-            smoothing_factor = 0.1  # Lower value for slower, smoother transitions
+            # Apply smooth transition to target position (reduced smoothing factor for less movement)
+            smoothing_factor = 0.05  # Reduced from 0.1 to 0.05 for smoother, slower transitions
             self.last_crop_x = int(self.last_crop_x * (1 - smoothing_factor) + target_x * smoothing_factor)
+            self.last_crop_y = int(self.last_crop_y * (1 - smoothing_factor) + target_y * smoothing_factor)
             
-            # Apply zoom effect
-            crop_x, crop_width = self.apply_zoom_effect(self.last_crop_x, self.crop_width)
+            # Apply zoom effect with maintained aspect ratio
+            crop_x, crop_y, crop_width, crop_height = self.apply_zoom_effect(
+                self.last_crop_x, self.last_crop_y, self.crop_width, self.crop_height
+            )
             
             # Make sure we don't go out of bounds after zoom
             if crop_x < 0:
                 crop_x = 0
+            if crop_y < 0:
+                crop_y = 0
             if crop_x + crop_width > self.input_width:
                 crop_x = self.input_width - crop_width
+            if crop_y + crop_height > self.input_height:
+                crop_y = self.input_height - crop_height
             
-            # Crop the frame
-            cropped_frame = frame[:, crop_x:crop_x + crop_width]
+            # Crop the frame with proper aspect ratio
+            cropped_frame = frame[crop_y:crop_y + crop_height, crop_x:crop_x + crop_width]
             
             # Resize to output dimensions
             vertical_frame = cv2.resize(cropped_frame, (self.output_width, self.output_height))
@@ -191,12 +228,52 @@ class VerticalVideoClipper:
             # Write frame to output video
             self.out.write(vertical_frame)
         
-        # Clean up
+        # Clean up OpenCV resources
         self.cap.release()
         self.out.release()
         self.pose.close()
+        
+        # Add audio from the original file to the output
+        self._add_audio_to_video()
+        
         print(f"Vertical video created successfully: {self.output_file}")
     
+    def _add_audio_to_video(self):
+        """Extract audio from input video and add it to the output video."""
+        try:
+            # Use FFmpeg to combine the video with the original audio
+            cmd = [
+                'ffmpeg',
+                '-i', self.temp_video_file,  # Video file
+                '-i', self.input_file,      # Original file with audio
+                '-c:v', 'copy',             # Copy video stream without re-encoding
+                '-c:a', 'aac',              # Audio codec
+                '-map', '0:v:0',            # Use video from first input
+                '-map', '1:a:0',            # Use audio from second input
+                '-shortest',                # Finish encoding when the shortest input stream ends
+                self.output_file            # Output file
+            ]
+            
+            print("Adding audio to the video...")
+            subprocess.run(cmd, check=True)
+            
+            # Remove the temporary file
+            if os.path.exists(self.temp_video_file):
+                os.remove(self.temp_video_file)
+                
+        except subprocess.CalledProcessError as e:
+            print(f"Error adding audio: {e}")
+            print("Saving video without audio...")
+            # If FFmpeg fails, just rename the temp file to the output file
+            if os.path.exists(self.temp_video_file):
+                os.rename(self.temp_video_file, self.output_file)
+        except FileNotFoundError:
+            print("FFmpeg not found. Please install FFmpeg to add audio to the video.")
+            print("Saving video without audio...")
+            # If FFmpeg is not installed, just rename the temp file to the output file
+            if os.path.exists(self.temp_video_file):
+                os.rename(self.temp_video_file, self.output_file)
+
 def main():
     parser = argparse.ArgumentParser(description="Convert landscape videos to vertical format with focus on people")
     parser.add_argument("input", help="Path to input video file")
