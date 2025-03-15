@@ -3,6 +3,8 @@ import cv2
 import argparse
 import re
 import time
+import tempfile
+import subprocess
 from pathlib import Path
 from tqdm import tqdm
 from typing import Dict, List, Tuple, Optional
@@ -102,6 +104,9 @@ class SubtitleProcessor:
             video_path: Path to input video
             subtitles: List of subtitle entries
         """
+        # Create temporary file for video without audio
+        temp_video_file = os.path.join(tempfile.gettempdir(), f"temp_subtitle_video_{int(time.time())}.mp4")
+        
         # Open video file
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
@@ -119,13 +124,13 @@ class SubtitleProcessor:
         output_path = os.path.join(self.output_folder, f"{base_name}_with_subtitles{ext}")
         
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+        out = cv2.VideoWriter(temp_video_file, fourcc, fps, (width, height))
         
         frame_count = 0
         current_time = 0
         
-        # Calculate font scale based on video width
-        font_scale = width / 1000  # Scale font based on video width
+        # Calculate font scale based on video width (increased for larger text)
+        font_scale = width / 640  # Increased scale for bigger text
         
         while cap.isOpened():
             ret, frame = cap.read()
@@ -149,10 +154,55 @@ class SubtitleProcessor:
             if frame_count % 500 == 0:
                 print(f"Processed {frame_count}/{total_frames} frames ({(frame_count/total_frames)*100:.1f}%)")
         
-        # Release resources
+        # Release OpenCV resources
         cap.release()
         out.release()
+        
+        # Add audio from the original file to the output
+        self._add_audio_to_video(video_path, temp_video_file, output_path)
+        
+        # Remove the temporary file
+        if os.path.exists(temp_video_file):
+            os.remove(temp_video_file)
+            
         print(f"Video with subtitles saved to: {output_path}")
+    
+    def _add_audio_to_video(self, input_video: str, subtitle_video: str, output_video: str):
+        """
+        Extract audio from input video and add it to the subtitle video.
+        
+        Args:
+            input_video: Original video with audio
+            subtitle_video: Video with subtitles but no audio
+            output_video: Final output file path
+        """
+        try:
+            # Use FFmpeg to combine the video with the original audio
+            cmd = [
+                'ffmpeg',
+                '-i', subtitle_video,     # Video with subtitles
+                '-i', input_video,        # Original file with audio
+                '-c:v', 'copy',           # Copy video stream without re-encoding
+                '-c:a', 'aac',            # Audio codec
+                '-map', '0:v:0',          # Use video from first input
+                '-map', '1:a:0',          # Use audio from second input
+                '-shortest',              # Finish encoding when the shortest input stream ends
+                output_video              # Output file
+            ]
+            
+            print("Adding audio to the video...")
+            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+                
+        except subprocess.CalledProcessError as e:
+            print(f"Error adding audio: {e}")
+            print("Saving video without audio...")
+            if os.path.exists(subtitle_video):
+                os.rename(subtitle_video, output_video)
+        except FileNotFoundError:
+            print("FFmpeg not found. Please install FFmpeg to add audio to the video.")
+            print("Saving video without audio...")
+            if os.path.exists(subtitle_video):
+                os.rename(subtitle_video, output_video)
     
     def _get_active_subtitle_text(self, subtitles: List[SubtitleEntry], current_time: float) -> str:
         """
@@ -191,16 +241,16 @@ class SubtitleProcessor:
         thickness = max(1, int(font_scale * 2))  # Scale thickness with font size
         color = (255, 255, 255)  # White text
         
-        # Wrap text if needed to fit width
-        wrapped_text = self._wrap_text(text, font, font_scale, thickness, width - 100)  # Leave margin
+        # Wrap text to fit width and limit to max 3 lines
+        wrapped_text = self._wrap_text(text, font, font_scale, thickness, width - 100, max_lines=3)  
         
-        # Calculate position (in bottom half of frame)
+        # Calculate position (at 70% of video height)
         text_lines = wrapped_text.split('\n')
-        line_height = int(40 * font_scale)
+        line_height = int(50 * font_scale)  # Increased for better spacing with larger text
         total_text_height = line_height * len(text_lines)
         
-        # Position text in bottom half, with padding from bottom
-        y_position = height - 50 - total_text_height
+        # Position text at approximately 70% of frame height
+        y_position = int(height * 0.7) - (total_text_height // 2)
         
         # Add black outline/background for better readability
         for i, line in enumerate(text_lines):
@@ -209,20 +259,22 @@ class SubtitleProcessor:
             x_position = (width - text_size[0]) // 2
             line_y_position = y_position + (i * line_height) + 30
             
-            # Draw black outline/background
-            cv2.putText(frame, line, (x_position-1, line_y_position-1), font, font_scale, (0, 0, 0), thickness + 1)
-            cv2.putText(frame, line, (x_position+1, line_y_position-1), font, font_scale, (0, 0, 0), thickness + 1)
-            cv2.putText(frame, line, (x_position-1, line_y_position+1), font, font_scale, (0, 0, 0), thickness + 1)
-            cv2.putText(frame, line, (x_position+1, line_y_position+1), font, font_scale, (0, 0, 0), thickness + 1)
+            # Draw black outline/background (thicker for better visibility)
+            for offset_x in [-2, -1, 0, 1, 2]:
+                for offset_y in [-2, -1, 0, 1, 2]:
+                    if offset_x != 0 or offset_y != 0:  # Skip the center point
+                        cv2.putText(frame, line, 
+                                   (x_position + offset_x, line_y_position + offset_y), 
+                                   font, font_scale, (0, 0, 0), thickness + 1)
             
             # Draw white text
             cv2.putText(frame, line, (x_position, line_y_position), font, font_scale, color, thickness)
         
         return frame
     
-    def _wrap_text(self, text: str, font, font_scale: float, thickness: int, max_width: int) -> str:
+    def _wrap_text(self, text: str, font, font_scale: float, thickness: int, max_width: int, max_lines: int = 3) -> str:
         """
-        Wrap text to fit within specified width.
+        Wrap text to fit within specified width and limit to a maximum number of lines.
         
         Args:
             text: Input text
@@ -230,9 +282,10 @@ class SubtitleProcessor:
             font_scale: Font scale factor
             thickness: Text thickness
             max_width: Maximum width for the text
+            max_lines: Maximum number of lines to generate
             
         Returns:
-            Text with line breaks added as needed
+            Text with line breaks added as needed, limited to max_lines
         """
         words = text.split()
         lines = []
@@ -254,10 +307,23 @@ class SubtitleProcessor:
                 if current_line:  # Only add if line has content
                     lines.append(' '.join(current_line))
                 current_line = [word]
+                
+                # If we've reached the maximum number of lines, we need to truncate
+                if len(lines) >= max_lines - 1 and current_line:  # -1 to account for the current line
+                    break
         
         # Add the last line if it has content
-        if current_line:
+        if current_line and len(lines) < max_lines:
             lines.append(' '.join(current_line))
+        
+        # If we have too many lines, truncate and add ellipsis
+        if len(lines) > max_lines:
+            lines = lines[:max_lines-1]
+            last_line = lines[-1]
+            if len(last_line) > 3:
+                lines[-1] = last_line[:-3] + "..."
+            else:
+                lines[-1] = last_line + "..."
         
         return '\n'.join(lines)
     
