@@ -1,0 +1,68 @@
+I have a long podcast transcript that spans several hours. Your task is to analyze the transcript and identify the most engaging, high-quality segments that could be compiled into a shorter, viral version of the podcast. The final clip should have a total duration between 1 and 3 minutes.
+
+Follow these instructions precisely:
+
+1. Transcript Analysis
+- Read and understand the entire transcript. If the transcript is too long, process it in overlapping chunks to preserve context.
+- Since the transcript lacks proper punctuation, use conversational patterns (pauses, speaker changes, logical shifts) to identify where a conversation starts and ends.
+- If the transcript does not contain any engaging or viral content, return an empty list []. Do not force segment creation.
+
+2. Identifying Engaging Segments
+- Select only the most engaging and complete segments that have strong viral potential.
+- The segment must be self-contained and tell a full story or idea. A viewer must be able to understand it without needing extra context from before or after.
+- Important:
+    - Do not choose segments shorter than 30 seconds.
+    - Do not cut a segment mid-sentence or mid-story. Ensure a natural start and end.
+    - The timestamps must be extremely accurate because they will be used for real video editing.
+
+3. Segment Selection & Duration
+- Each segment should be between 30 and 90 seconds long.
+- The total combined duration of selected segments should be between 1 and 3 minutes.
+- Prioritize quality over quantity. It is better to have one or two high-quality segments than multiple weak ones.
+- Ensure the segment contains a strong hook, an engaging middle, and a natural ending.
+
+4. Generate a Clickable Title & Description
+- Title: Create a short, attention-grabbing title that would perform well on YouTube, TikTok, and Instagram.
+- Description: Write a compelling summary that highlights why this clip is worth watching.
+
+5. Output Format
+- Return results in a JSON array.
+- If no strong segments are found, return an empty list [].
+- Each object in the array should include:
+
+[
+    {
+        "start": "00:12:30",
+        "end": "00:13:10",
+        "duration": "00:00:40",
+        "title": "The Unexpected Twist",
+        "description": "Discover the shocking revelation that changed everything in this conversation.",
+        "explanation": "This segment has high emotional impact and a surprising twist, making it ideal for viral content.",
+        "segment_file": "1.txt",
+        "segment_index": 1,
+        "hashtags": ["#unexpected", "#viral", "#revelation"],
+        "transcripts": "[00:12:30.000 --> 00:13:10.000] ... (transcript snippet) ..."
+    },
+    {
+        "start": "00:50:00",
+        "end": "00:50:45",
+        "duration": "00:00:45",
+        "title": "Industry Challenges Exposed",
+        "description": "Explore deep insights into industry hurdles and what’s really happening behind the scenes.",
+        "explanation": "This segment contains a clear, well-structured discussion with valuable insights.",
+        "segment_file": "2.txt",
+        "segment_index": 2,
+        "hashtags": ["#industry", "#challenges", "#insights"],
+        "transcripts": "[00:50:00.000 --> 00:50:45.000] ... (transcript snippet) ..."
+    }
+]
+
+
+Important Guidelines:
+- Ensure timestamps are 100% accurate – they will be used to cut the actual podcast.
+- Never cut off a sentence or story – select segments with a natural start and end.
+- Only include segments that are complete, self-contained and understandable without any extra context.
+- Do not output random clips just to meet a quota – return an empty list [] if needed.
+- Focus on the best moments – high energy, emotional depth, surprising insights, or humor.
+
+Now, process the transcript and provide only the best possible segments with precise timestamps, titles, descriptions, and explanations.
