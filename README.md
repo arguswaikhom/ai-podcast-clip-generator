@@ -124,4 +124,62 @@ This will take all videos from the videos folder, find their matching subtitles 
 Example with custom output folder:
 ```bash
 python vertical_video_subtitle.py videos_folder subtitles_folder --output_folder custom_output
-``` 
+```
+
+## YouTube Video Downloader
+
+This tool allows you to download YouTube videos in the highest available quality using yt-dlp. It provides detailed progress information and avoids re-downloading videos that have already been downloaded.
+
+### Features
+
+- Downloads videos in the best available quality (highest resolution with audio)
+- Uses yt-dlp, a powerful and actively maintained YouTube downloader
+- Displays download progress with percentage, size, speed, and estimated time remaining
+- Automatically converts to MP4 format for maximum compatibility
+- Skips downloading if the file already exists
+- Creates the output directory if it doesn't exist
+
+### Usage
+
+```bash
+python yt_video_downloader.py --youtube-url "https://www.youtube.com/watch?v=VIDEOID" --output-file "path/to/output.mp4"
+```
+
+### Requirements
+
+This script requires yt-dlp and FFmpeg:
+
+```bash
+pip install yt-dlp
+```
+
+FFmpeg is needed for the best quality downloads (merging separate video and audio streams). Install it according to your OS:
+- Windows: Download from [ffmpeg.org](https://ffmpeg.org/download.html) or use Chocolatey: `choco install ffmpeg`
+- macOS: Use Homebrew: `brew install ffmpeg`
+- Linux: Use your package manager, e.g., `apt install ffmpeg` or `yum install ffmpeg`
+
+## Subtitle Segment Generator
+
+This tool processes subtitle segments, analyzes them using an AI model, and generates suggestions. It can be used to identify interesting segments in videos based on their subtitles.
+
+### Features
+
+- Process text segments from subtitle files
+- Call AI model API to analyze segments for interesting content
+- Save raw API responses for future reference
+- Skip API calls if responses already exist
+- Generate a JSON file with all suggestions
+
+### Usage
+
+```bash
+python subtitle_segment_generator.py --segment-folder "path/to/segments" --system-prompt-file "path/to/prompt.txt" --output-folder "path/to/outputs" --suggestion-output "path/to/suggestions.json" --api-key "your-api-key"
+```
+
+### Arguments
+
+- `--segment-folder`: Folder containing all the subtitle segments to analyze
+- `--system-prompt-file`: File containing the system prompt for the AI model
+- `--output-folder`: Folder to store the AI model raw outputs
+- `--suggestion-output`: File to store the final JSON output
+- `--api-key`: AI model API key 

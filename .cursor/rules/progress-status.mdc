@@ -1,0 +1,14 @@
+---
+description: Progress and logs
+globs: *.py
+alwaysApply: false
+---
+
+# Display proper progress and logs
+
+- If something is downloading; display the progress percentage, total downloaded and total size, ETA, speed, and time taken, etc.
+- If some of the progress is very hard to display or if it's going to make the code very complex, you can skip some of the logs or progress. Code understandability and maintenance is also important.
+- If multiple files are processing, display out of how many total files, which one is processing.
+- For each of the processing file, display detail progress and logs.
+- Throughout the process of any code execution, display proper logs to understand what's currently going on.
+- Display proper error messages if any error is encounter.

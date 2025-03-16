@@ -1,0 +1,12 @@
+---
+description: Multiprocess
+globs: *.py
+alwaysApply: false
+---
+
+# Execute multiple and improve performance
+
+- While performing a list of execution, see if it's possible to perform multiple operations simultaneously to reduce the total time taken to complete.
+- Make sure the multiprocess doesn't create any issue like overwriting file content, locking file access, etc.
+- If multiprocess is going to create issue, perform one by one.
+- Be aware of the system capability to take the full avantage of the system and not overwhelm the system. 
