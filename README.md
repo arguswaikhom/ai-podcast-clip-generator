@@ -183,3 +183,67 @@ python subtitle_segment_generator.py --segment-folder "path/to/segments" --syste
 - `--output-folder`: Folder to store the AI model raw outputs
 - `--suggestion-output`: File to store the final JSON output
 - `--api-key`: AI model API key 
+
+## Video Segment Clipper
+
+The Video Segment Clipper tool allows you to automatically cut segments from a video based on suggestions provided in a JSON file. It's particularly useful for extracting highlights or interesting segments from longer videos.
+
+### Features
+
+- Cut video segments based on start and end timestamps from a JSON suggestions file
+- Include both video and audio in the clips
+- Optionally remove silent gaps between conversations to preserve only the conversation
+- Skip segments that have already been clipped
+- Display detailed progress and logs during processing
+- Sanitize filenames based on segment titles for compatibility
+
+### Usage
+
+```bash
+python video_segment_clipper.py video_file.mp4 suggestions.json output_folder
+```
+
+### Arguments
+
+- `video`: Path to the input video file
+- `suggestions`: Path to the JSON file containing segment suggestions
+- `output_folder`: Path to the output folder where clips will be saved
+
+### Optional Arguments
+
+- `--remove-silence`: Enable removal of silent gaps between conversations (default: False)
+- `--silence-threshold`: Threshold in dB for silence detection (default: -30.0)
+- `--silence-duration`: Minimum duration of silence to be detected and removed in seconds (default: 0.5)
+
+### Suggestions JSON Format
+
+The suggestions JSON file should have the following format:
+
+```json
+[
+  {
+    "start": "00:02:12",
+    "end": "00:03:17",
+    "title": "Segment Title",
+    "description": "Optional description",
+    "hashtags": ["#tag1", "#tag2"]
+  },
+  {
+    "start": "00:05:30",
+    "end": "00:06:45",
+    "title": "Another Segment",
+    "description": "Optional description",
+    "hashtags": ["#tag3", "#tag4"]
+  }
+]
+```
+
+Each segment must include at least the `start` and `end` timestamps in the format `HH:MM:SS` or `HH:MM:SS.mmm`.
+
+### Example with silence removal
+
+```bash
+python video_segment_clipper.py video_file.mp4 suggestions.json clips_output --remove-silence --silence-threshold -35 --silence-duration 0.75
+```
+
+This will extract segments from `video_file.mp4` according to the timestamps in `suggestions.json`, remove silent gaps longer than 0.75 seconds below -35dB, and save the clips to the `clips_output` folder. 
