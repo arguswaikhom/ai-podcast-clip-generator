@@ -30,6 +30,18 @@ Follow these instructions precisely:
 - If no strong segments are found, return an empty list [].
 - Each object in the array should include:
 
+"start": the starting timestamp (in HH:MM:SS format)
+"end": the ending timestamp (in HH:MM:SS format)
+"duration": the duration of the segment (ensure it is between 30 and 90 seconds)
+"title": a catchy, clickable title
+"description": an enticing description summarizing the clip
+"explanation": a brief explanation of why this segment was chosen
+"segment_file": the file name (e.g., "1.txt") from which the segment is extracted
+"segment_index": a numerical identifier for the segment
+"hashtags": a list of relevant hashtags to accompany the clip
+
+Example: 
+
 [
     {
         "start": "00:12:30",
@@ -41,7 +53,6 @@ Follow these instructions precisely:
         "segment_file": "1.txt",
         "segment_index": 1,
         "hashtags": ["#unexpected", "#viral", "#revelation"],
-        "transcripts": "[00:12:30.000 --> 00:13:10.000] ... (transcript snippet) ..."
     },
     {
         "start": "00:50:00",
@@ -53,7 +64,6 @@ Follow these instructions precisely:
         "segment_file": "2.txt",
         "segment_index": 2,
         "hashtags": ["#industry", "#challenges", "#insights"],
-        "transcripts": "[00:50:00.000 --> 00:50:45.000] ... (transcript snippet) ..."
     }
 ]
 

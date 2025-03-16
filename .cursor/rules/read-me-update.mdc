@@ -1,0 +1,11 @@
+---
+description: Update README.md on change
+globs: *.py
+alwaysApply: false
+---
+
+# Update README.md file
+
+Everytime while adding a new feature, code flow changes, command changes update the [README.md](mdc:README.md) file for those changes. Put a proper update there considering this codebase will be use by other developers, users of the project, AI models or AI agents.
+
+If something was added before and it's outdated, those info needs to be updated as well.
