@@ -78,14 +78,6 @@ python subtitle_generator.py [input_folder] --output_folder [output_folder] --wo
 python vertical_video_subtitle.py [video_folder] [subtitle_folder] --output_folder [output_folder] --highlight [style] --animation [style]
 ```
 
-### Windows Batch File
-
-For Windows users, a batch file is provided for easier execution:
-
-```
-run_podcast_clipper.bat
-```
-
 ## Project Structure
 
 The project consists of several Python modules:

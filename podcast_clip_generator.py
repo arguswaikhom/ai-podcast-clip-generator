@@ -38,11 +38,11 @@ def run_podcast_clipper(youtube_urls: list):
         yt_transcript_downloader_command = f"{python_path} yt_transcript_downloader.py {youtube_url} --output_folder {folders[OutputFolder.BASE]}"
         execute_command(f"(Video {i} - 1/7) Downloading transcript", yt_transcript_downloader_command)
 
-        # Run the segment generator
+        # Run the AI suggestion generator
         api_key = os.getenv('DEEPSEEK_API_KEY')
         suggestion_json_file = os.path.join(folders[OutputFolder.SEGMENTS_RESPONSE], "suggestions.json")
         prompt_file = os.path.join(current_dir, "prompt", "short_podcast.txt")
-        segment_generator_command = f"{python_path} subtitle_segment_generator.py --segment-folder {folders[OutputFolder.SEGMENTS_INPUT]} --system-prompt-file {prompt_file} --output-folder {folders[OutputFolder.SEGMENTS_RESPONSE]} --suggestion-output {suggestion_json_file} --api-key {api_key}"
+        segment_generator_command = f"{python_path} ai_suggestion_generator.py --segment-folder {folders[OutputFolder.SEGMENTS_INPUT]} --system-prompt-file {prompt_file} --output-folder {folders[OutputFolder.SEGMENTS_RESPONSE]} --suggestion-output {suggestion_json_file} --api-key {api_key}"
         execute_command(f"(Video {i} - 2/7) Generating segment suggestions", segment_generator_command)
 
         # Run the video downloader
@@ -52,24 +52,24 @@ def run_podcast_clipper(youtube_urls: list):
 
         # Run the suggested video clipper
         yt_clip_folder = folders[OutputFolder.VIDEO_CLIPS]
-        video_clipper_command = f"{python_path} video_segment_clipper.py {downloaded_yt_video_file} {suggestion_json_file} {yt_clip_folder} --remove-silence"
+        video_clipper_command = f"{python_path} video_suggestion_clipper.py {downloaded_yt_video_file} {suggestion_json_file} {yt_clip_folder} --remove-silence"
         execute_command(f"(Video {i} - 4/7) Clipping video", video_clipper_command)
 
         # Run the vertical video converter
         vertical_video_folder = folders[OutputFolder.VERTICAL_CLIPS]
-        vertical_video_converter_command = f"{python_path} vertical_video_clipper.py {yt_clip_folder} --output_folder {vertical_video_folder}"
+        vertical_video_converter_command = f"{python_path} vertical_video_converter.py {yt_clip_folder} --output_folder {vertical_video_folder}"
         execute_command(f"(Video {i} - 5/7) Converting video to vertical", vertical_video_converter_command)
 
         # Run subtitle generator
         clip_subtitles_folder = folders[OutputFolder.CLIP_SUBTITLES]
-        subtitle_generator_command = f"{python_path} subtitle_generator.py {vertical_video_folder} --output_folder {clip_subtitles_folder} --word_timings"
+        subtitle_generator_command = f"{python_path} video_subtitle_generator.py {vertical_video_folder} --output_folder {clip_subtitles_folder} --word_timings"
         execute_command(f"(Video {i} - 6/7) Generating subtitles", subtitle_generator_command)
 
         # Attach subtitles to the vertical video
         subtitled_video_folder = folders[OutputFolder.SUBTITLED_CLIPS]
         highlight_style = "standard" # "bigword"
         animation_style = "scale" # "bounce"
-        subtitled_video_converter_command = f"{python_path} vertical_video_subtitle.py {vertical_video_folder} {clip_subtitles_folder} --output_folder {subtitled_video_folder} --highlight {highlight_style} --animation {animation_style}"
+        subtitled_video_converter_command = f"{python_path} video_subtitle_embedder.py {vertical_video_folder} {clip_subtitles_folder} --output_folder {subtitled_video_folder} --highlight {highlight_style} --animation {animation_style}"
         execute_command(f"(Video {i} - 7/7) Attaching subtitles", subtitled_video_converter_command)
 
         # Calculate and display time taken for this video
