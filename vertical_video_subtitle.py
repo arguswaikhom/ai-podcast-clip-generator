@@ -7,6 +7,7 @@ import tempfile
 import subprocess
 import json
 import math
+import sys
 from tqdm import tqdm
 from typing import Dict, List, Optional
 
@@ -55,26 +56,39 @@ class SubtitleProcessor:
         
         Args:
             video_extensions: List of video file extensions to process
+            
+        Returns:
+            bool: True if at least one video was processed successfully, False otherwise
         """
-        if video_extensions is None:
-            video_extensions = [".mp4", ".avi", ".mov", ".mkv", ".webm"]
-        
-        # Get list of video files
-        video_files = []
-        for root, _, files in os.walk(self.videos_folder):
-            for file in files:
-                if any(file.lower().endswith(ext) for ext in video_extensions):
-                    video_files.append(os.path.join(root, file))
-        
-        if not video_files:
-            print(f"No video files found in {self.videos_folder} with extensions {video_extensions}")
-            return
-        
-        print(f"Found {len(video_files)} video files to process.")
-        
-        # Process each video file
-        for video_path in tqdm(video_files, desc="Processing videos"):
-            self.add_subtitles_to_video(video_path)
+        try:
+            if video_extensions is None:
+                video_extensions = [".mp4", ".avi", ".mov", ".mkv", ".webm"]
+            
+            # Get list of video files
+            video_files = []
+            for root, _, files in os.walk(self.videos_folder):
+                for file in files:
+                    if any(file.lower().endswith(ext) for ext in video_extensions):
+                        video_files.append(os.path.join(root, file))
+            
+            if not video_files:
+                print(f"No video files found in {self.videos_folder} with extensions {video_extensions}")
+                return False
+            
+            print(f"Found {len(video_files)} video files to process.")
+            
+            # Process each video file
+            successful_videos = 0
+            for video_path in tqdm(video_files, desc="Processing videos"):
+                if self.add_subtitles_to_video(video_path):
+                    successful_videos += 1
+            
+            print(f"Video processing completed. Successfully processed {successful_videos}/{len(video_files)} videos.")
+            return successful_videos > 0
+            
+        except Exception as e:
+            print(f"Error processing videos: {str(e)}")
+            return False
     
     def add_subtitles_to_video(self, video_path: str):
         """
@@ -82,34 +96,40 @@ class SubtitleProcessor:
         
         Args:
             video_path: Path to the input video file
+            
+        Returns:
+            bool: True if subtitles were added successfully, False otherwise
         """
-        # Get video name and find corresponding subtitle file
-        video_name = os.path.basename(video_path)
-        base_name, _ = os.path.splitext(video_name)
-        subtitle_path = os.path.join(self.subtitles_folder, f"{base_name}.srt")
-        
-        # Check if subtitle file exists
-        if not os.path.exists(subtitle_path):
-            print(f"Subtitle not found for {video_name}, skipping.")
-            return
-        
-        # Parse subtitle file
-        subtitles = self.parse_srt(subtitle_path)
-        if not subtitles:
-            print(f"No valid subtitles found in {subtitle_path}, skipping.")
-            return
-        
-        # Check if there's a json file with word timings available
-        word_timing_path = os.path.join(self.subtitles_folder, f"{base_name}_words.json")
-        if self.highlight_style and os.path.exists(word_timing_path):
-            self._add_word_timings_to_subtitles(subtitles, word_timing_path)
-        
-        # Process video with subtitles
         try:
+            # Get video name and find corresponding subtitle file
+            video_name = os.path.basename(video_path)
+            base_name, _ = os.path.splitext(video_name)
+            subtitle_path = os.path.join(self.subtitles_folder, f"{base_name}.srt")
+            
+            # Check if subtitle file exists
+            if not os.path.exists(subtitle_path):
+                print(f"Subtitle not found for {video_name}, skipping.")
+                return False
+            
+            # Parse subtitle file
+            subtitles = self.parse_srt(subtitle_path)
+            if not subtitles:
+                print(f"No valid subtitles found in {subtitle_path}, skipping.")
+                return False
+            
+            # Check if there's a json file with word timings available
+            word_timing_path = os.path.join(self.subtitles_folder, f"{base_name}_words.json")
+            if self.highlight_style and os.path.exists(word_timing_path):
+                self._add_word_timings_to_subtitles(subtitles, word_timing_path)
+            
+            # Process video with subtitles
             self._process_video_with_subtitles(video_path, subtitles)
             print(f"Successfully processed video: {video_name}")
+            return True
+            
         except Exception as e:
-            print(f"Error processing video {video_name}: {str(e)}")
+            print(f"Error processing video {os.path.basename(video_path)}: {str(e)}")
+            return False
     
     def _add_word_timings_to_subtitles(self, subtitles: List[SubtitleEntry], word_timing_path: str):
         """
@@ -175,7 +195,12 @@ class SubtitleProcessor:
         # Set up video writer for output
         video_name = os.path.basename(video_path)
         base_name, ext = os.path.splitext(video_name)
-        output_path = os.path.join(self.output_folder, f"{base_name}_with_subtitles{ext}")
+        output_path = os.path.join(self.output_folder, f"{base_name}{ext}")
+
+        # Check if output file already exists
+        if os.path.exists(output_path):
+            print(f"Output file already exists: {output_path}\n")
+            return
         
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         out = cv2.VideoWriter(temp_video_file, fourcc, fps, (width, height))
@@ -716,39 +741,70 @@ class SubtitleProcessor:
             print(f"Error parsing subtitle file {srt_file}: {str(e)}")
             return []
 
+def process_videos(videos_folder: str, subtitles_folder: str, output_folder: str = None, highlight_style: str = None, animation_style: str = "bounce", video_extensions: List[str] = None):
+    """
+    Process videos by adding subtitles.
+    
+    Args:
+        videos_folder: Path to the folder containing video files
+        subtitles_folder: Path to the folder containing subtitle files
+        output_folder: Path to the output folder (default: subtitle_video_output)
+        highlight_style: Style of word highlighting ('standard', 'bigword', or None)
+        animation_style: Animation style for bigword mode ('bounce' or 'scale')
+        video_extensions: List of video file extensions to process
+        
+    Returns:
+        bool: True if at least one video was processed successfully, False otherwise
+    """
+    try:
+        # Set up the output folder
+        if output_folder is None:
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            output_folder = os.path.join(script_dir, "subtitle_video_output")
+        
+        # Create processor and process videos
+        processor = SubtitleProcessor(
+            videos_folder=videos_folder,
+            subtitles_folder=subtitles_folder,
+            output_folder=output_folder,
+            highlight_style=highlight_style,
+            animation_style=animation_style
+        )
+        
+        # Set default extensions if None
+        if video_extensions is None:
+            video_extensions = [".mp4", ".avi", ".mov", ".mkv", ".webm"]
+        
+        # Process videos
+        return processor.process_videos(video_extensions=video_extensions)
+        
+    except Exception as e:
+        print(f"Error in process_videos function: {str(e)}")
+        return False
+
 def main():
     parser = argparse.ArgumentParser(description="Add subtitles directly to video files")
     parser.add_argument("videos_folder", help="Path to folder containing video files")
     parser.add_argument("subtitles_folder", help="Path to folder containing subtitle (.srt) files")
-    parser.add_argument("--output_folder", help="Path to output folder (default: subtitle_video_output)",
-                        default=None)
-    parser.add_argument("--highlight", choices=["standard", "bigword"], 
-                        help="Highlighting style: 'standard' for highlighting within text, 'bigword' for showing only the current word in large text")
-    parser.add_argument("--animation", choices=["bounce", "scale"], default="bounce",
-                        help="Animation style for bigword mode: 'bounce' for bouncing animation, 'scale' for scaling animation (default: bounce)")
-    parser.add_argument("--extensions", nargs="+", 
-                        default=[".mp4", ".avi", ".mov", ".mkv", ".webm"],
-                        help="Video file extensions to process (default: .mp4 .avi .mov .mkv .webm)")
+    parser.add_argument("--output_folder", help="Path to output folder (default: subtitle_video_output)", default=None)
+    parser.add_argument("--highlight", choices=["standard", "bigword"], help="Highlighting style: 'standard' for highlighting within text, 'bigword' for showing only the current word in large text")
+    parser.add_argument("--animation", choices=["bounce", "scale"], default="scale", help="Animation style for bigword mode: 'bounce' for bouncing animation, 'scale' for scaling animation (default: scale)")
+    parser.add_argument("--extensions", nargs="+", default=[".mp4", ".avi", ".mov", ".mkv", ".webm"], help="Video file extensions to process (default: .mp4 .avi .mov .mkv .webm)")
     args = parser.parse_args()
     
-    # Set up the output folder - in the same directory as the script
-    if args.output_folder is None:
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        output_folder = os.path.join(script_dir, "subtitle_video_output")
-    else:
-        output_folder = args.output_folder
-    
-    # Initialize the subtitle processor
-    processor = SubtitleProcessor(
+    # Process videos
+    success = process_videos(
         videos_folder=args.videos_folder,
         subtitles_folder=args.subtitles_folder,
-        output_folder=output_folder,
+        output_folder=args.output_folder,
         highlight_style=args.highlight,
-        animation_style=args.animation
+        animation_style=args.animation,
+        video_extensions=args.extensions
     )
     
-    # Process videos
-    processor.process_videos(video_extensions=args.extensions)
+    if not success:
+        print("No videos were processed successfully.")
+        sys.exit(1)
     
     print("Video processing completed.")
 

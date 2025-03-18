@@ -3,7 +3,6 @@ import os
 import json
 import argparse
 from openai import OpenAI
-from pathlib import Path
 
 def read_file(file_path):
     """Read the content of a file"""
@@ -176,56 +175,71 @@ def process_segments(segment_folder, system_prompt_file, output_folder, suggesti
         api_key: AI model API key
         
     Returns:
-        list: Combined list of suggestions
+        bool: True if processing was successful, False if an error occurred
     """
-    # Check if final output already exists
-    if check_final_output_exists(suggestion_output):
-        print("Final suggestion output already exists. Skipping processing.")
-        return []
-    
-    # Initialize OpenAI client 
-    client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
-    
-    # Read the system prompt
-    system_prompt = read_file(system_prompt_file)
-    
-    # Get segment files (sorted by name)
-    segment_files = sorted(
-        [os.path.join(segment_folder, f) for f in os.listdir(segment_folder) if f.endswith('.txt')]
-    )
-    
-    if not segment_files:
-        print(f"No segment files found in directory: {segment_folder}")
-        return []
-    
-    # Process each segment
-    all_suggestions = []
-    
-    for i, segment_file in enumerate(segment_files):
-        print(f"Processing segment {i+1}/{len(segment_files)}: {os.path.basename(segment_file)}")
+    try:
+        # Check if final output already exists
+        if check_final_output_exists(suggestion_output):
+            print("Final suggestion output already exists. Skipping processing.")
+            return True
         
-        # Check if response file already exists
-        response_exists, response_file = response_file_exists(segment_file, output_folder)
+        # Initialize OpenAI client 
+        client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
         
-        if response_exists:
-            print(f"Response file already exists for segment {os.path.basename(segment_file)}. Skipping API call.")
-            suggestions = extract_suggestions_from_response_file(response_file)
-        else:
-            # Read segment content
-            segment_content = read_file(segment_file)
+        # Read the system prompt
+        system_prompt = read_file(system_prompt_file)
+        
+        # Get segment files (sorted by name)
+        segment_files = sorted(
+            [os.path.join(segment_folder, f) for f in os.listdir(segment_folder) if f.endswith('.txt')]
+        )
+        
+        if not segment_files:
+            print(f"No segment files found in directory: {segment_folder}")
+            return False
+        
+        # Process each segment
+        all_suggestions = []
+        
+        for i, segment_file in enumerate(segment_files):
+            print(f"Processing segment {i+1}/{len(segment_files)}: {os.path.basename(segment_file)}")
             
-            # Get suggestions
-            suggestions = get_segment_suggestions(client, segment_content, system_prompt, segment_file, output_folder)
+            # Check if response file already exists
+            response_exists, response_file = response_file_exists(segment_file, output_folder)
+            
+            if response_exists:
+                print(f"Response file already exists for segment {os.path.basename(segment_file)}. Skipping API call.")
+                suggestions = extract_suggestions_from_response_file(response_file)
+            else:
+                # Read segment content
+                segment_content = read_file(segment_file)
+                
+                # Get suggestions
+                suggestions = get_segment_suggestions(client, segment_content, system_prompt, segment_file, output_folder)
+            
+            # Add segment information to each suggestion
+            for suggestion in suggestions:
+                suggestion["segment_file"] = os.path.basename(segment_file)
+                suggestion["segment_index"] = i + 1
+            
+            # Add to the combined list
+            all_suggestions.extend(suggestions)
         
-        # Add segment information to each suggestion
-        for suggestion in suggestions:
-            suggestion["segment_file"] = os.path.basename(segment_file)
-            suggestion["segment_index"] = i + 1
+        # Create directory for suggestion output if needed
+        os.makedirs(os.path.dirname(os.path.abspath(suggestion_output)), exist_ok=True)
         
-        # Add to the combined list
-        all_suggestions.extend(suggestions)
-    
-    return all_suggestions
+        # Write combined suggestions to file
+        with open(suggestion_output, 'w', encoding='utf-8') as f:
+            json.dump(all_suggestions, f, indent=2)
+        
+        print(f"Successfully generated {len(all_suggestions)} suggestions")
+        print(f"Output file: {suggestion_output}")
+        
+        return True
+        
+    except Exception as e:
+        print(f"Error processing segments: {e}")
+        return False
 
 def main():
     parser = argparse.ArgumentParser(description="Generate suggestions from subtitle segments")
@@ -237,40 +251,14 @@ def main():
     
     args = parser.parse_args()
     
-    # Verify segments directory exists
-    if not os.path.isdir(args.segment_folder):
-        print(f"Error: Segments directory not found: {args.segment_folder}")
-        return
-    
-    # Verify system prompt file exists
-    if not os.path.isfile(args.system_prompt_file):
-        print(f"Error: System prompt file not found: {args.system_prompt_file}")
-        return
-    
-    # Create output folder if it doesn't exist
-    os.makedirs(args.output_folder, exist_ok=True)
-    
     # Process segments to get suggestions
-    all_suggestions = process_segments(
+    process_segments(
         args.segment_folder, 
         args.system_prompt_file,
         args.output_folder,
         args.suggestion_output,
         args.api_key
     )
-    
-    if all_suggestions:
-        # Create directory for suggestion output if needed
-        os.makedirs(os.path.dirname(os.path.abspath(args.suggestion_output)), exist_ok=True)
-        
-        # Write combined suggestions to file
-        with open(args.suggestion_output, 'w', encoding='utf-8') as f:
-            json.dump(all_suggestions, f, indent=2)
-        
-        print(f"Successfully generated {len(all_suggestions)} suggestions")
-        print(f"Output file: {args.suggestion_output}")
-    else:
-        print("No suggestions generated")
 
 if __name__ == "__main__":
     main()

@@ -4,11 +4,9 @@ import argparse
 import subprocess
 import time
 from datetime import datetime
-import ffmpeg
 from tqdm import tqdm
 import tempfile
 import shutil
-from typing import List, Dict, Any, Optional, Tuple
 
 class VideoSegmentClipper:
     """
@@ -361,7 +359,12 @@ class VideoSegmentClipper:
                 # Create output filename (sanitize title to make it filesystem-friendly)
                 sanitized_title = ''.join(c if c.isalnum() or c in ' -_' else '_' for c in title)
                 sanitized_title = sanitized_title.replace(' ', '_')
-                output_filename = f"{video_name}_{sanitized_title}_{start_time_str.replace(':', '-')}_to_{end_time_str.replace(':', '-')}.mp4"
+                output_filename = f"{sanitized_title}_{start_time_str.replace(':', '-')}_to_{end_time_str.replace(':', '-')}.mp4"
+                
+                # Truncate filename if longer than 150 chars
+                if len(output_filename) > 150:
+                    base, ext = os.path.splitext(output_filename)
+                    output_filename = base[:146] + ext
                 output_path = os.path.join(self.output_folder, output_filename)
                 
                 # Check if clip already exists
@@ -398,7 +401,6 @@ class VideoSegmentClipper:
         print(f"  Total suggestions: {len(suggestions)}")
         print(f"  Output folder: {self.output_folder}")
 
-
 def main():
     """Main function to run when script is executed directly."""
     parser = argparse.ArgumentParser(description="Clip video segments based on suggestions")
@@ -406,11 +408,8 @@ def main():
     parser.add_argument("suggestions", help="Path to the JSON file containing segment suggestions")
     parser.add_argument("output_folder", help="Path to the output folder where clips will be saved")
     parser.add_argument("--remove-silence", action="store_true", help="Remove silent gaps between conversations")
-    parser.add_argument("--silence-threshold", type=float, default=-30.0, 
-                       help="Threshold in dB for silence detection (default: -30.0)")
-    parser.add_argument("--silence-duration", type=float, default=0.5,
-                       help="Minimum duration of silence to be detected and removed in seconds (default: 0.5)")
-    
+    parser.add_argument("--silence-threshold", type=float, default=-30.0, help="Threshold in dB for silence detection (default: -30.0)")
+    parser.add_argument("--silence-duration", type=float, default=0.5, help="Minimum duration of silence to be detected and removed in seconds (default: 0.5)")
     args = parser.parse_args()
     
     # Validate input paths

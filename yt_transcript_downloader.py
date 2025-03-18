@@ -2,42 +2,10 @@
 import os
 import re
 import argparse
-import urllib.parse
 import subprocess
-import json
 import tempfile
-from pathlib import Path
 
-
-def extract_video_id(url):
-    """
-    Extract the video ID from a YouTube URL.
-    
-    Args:
-        url (str): The YouTube video URL
-        
-    Returns:
-        str: The YouTube video ID or None if not found
-    """
-    # Handle various YouTube URL formats
-    if 'youtu.be/' in url:
-        # Short URL format: https://youtu.be/VIDEO_ID
-        return url.split('youtu.be/')[1].split('?')[0].split('&')[0]
-    elif 'youtube.com/watch' in url:
-        # Standard URL format: https://www.youtube.com/watch?v=VIDEO_ID
-        parsed_url = urllib.parse.urlparse(url)
-        query_params = urllib.parse.parse_qs(parsed_url.query)
-        return query_params.get('v', [None])[0]
-    elif 'youtube.com/embed/' in url:
-        # Embed URL format: https://www.youtube.com/embed/VIDEO_ID
-        return url.split('youtube.com/embed/')[1].split('?')[0].split('&')[0]
-    elif 'youtube.com/v/' in url:
-        # Old embed URL format: https://www.youtube.com/v/VIDEO_ID
-        return url.split('youtube.com/v/')[1].split('?')[0].split('&')[0]
-    
-    # If no match found
-    return None
-
+from utils.yt_info_extractor import extract_video_id
 
 def download_transcript(video_url, output_folder):
     """
@@ -60,11 +28,12 @@ def download_transcript(video_url, output_folder):
             print(f"Could not extract video ID from URL: {video_url}")
             return None, None
         
-        # Create output folder if it doesn't exist
-        os.makedirs(output_folder, exist_ok=True)
+        # Create transcript folder if it doesn't exist
+        transcript_folder = os.path.join(output_folder, 'transcript')
+        os.makedirs(transcript_folder, exist_ok=True)
         
         # Path for saving the original transcript
-        original_path = os.path.join(output_folder, f"{video_id}_original.vtt")
+        original_path = os.path.join(transcript_folder, "transcript_original.vtt")
         
         # Use yt-dlp to download only the subtitles
         # --write-auto-sub: download auto-generated subs
@@ -281,8 +250,8 @@ def segment_transcript(transcript_text, output_folder, max_lines_per_segment=500
     lines = transcript_text.strip().split('\n')
     total_lines = len(lines)
     
-    # Create segments subfolder
-    segments_folder = os.path.join(output_folder, 'segments')
+    # Create segments/input subfolder
+    segments_folder = os.path.join(output_folder, 'segments', 'input')
     os.makedirs(segments_folder, exist_ok=True)
     
     # Calculate segmentation parameters
@@ -364,89 +333,97 @@ def process_youtube_url(yt_url, output_folder, create_segments=True, max_lines_p
         output_folder (str): The output folder for transcripts
         create_segments (bool): Whether to create segmented transcript files
         max_lines_per_segment (int): Maximum number of lines per segment
+        
+    Returns:
+        bool: True if processing was successful, False otherwise
     """
-    print(f"Processing YouTube URL: {yt_url}")
-    
-    # Extract video ID for naming
-    video_id = extract_video_id(yt_url)
-    if not video_id:
-        print(f"Error: Could not extract video ID from URL: {yt_url}")
-        return
-    
-    # Define file paths
-    original_path = os.path.join(output_folder, f"{video_id}_original.vtt")
-    cleaned_path = os.path.join(output_folder, f"{video_id}_cleaned.txt")
-    segments_folder = os.path.join(output_folder, 'segments')
-    
-    # Check if transcript files already exist
-    original_exists = os.path.exists(original_path)
-    cleaned_exists = os.path.exists(cleaned_path)
-    segments_exist = os.path.exists(segments_folder) and any(
-        f.startswith(f"segment_") and f.endswith(".txt") 
-        for f in os.listdir(segments_folder)
-    ) if os.path.exists(segments_folder) else False
-    
-    # Download or use existing transcript
-    if original_exists:
-        print(f"Original transcript already exists at: {original_path}")
-        # Read the existing transcript
-        try:
-            with open(original_path, 'r', encoding='utf-8') as f:
-                transcript_text = f.read()
-        except UnicodeDecodeError:
-            # Try another encoding if utf-8 fails
-            with open(original_path, 'r', encoding='latin-1') as f:
-                transcript_text = f.read()
-    else:
-        # Download the transcript
-        downloaded_path, transcript_text = download_transcript(yt_url, output_folder)
-        if not transcript_text:
-            print("Failed to download transcript.")
-            return
-    
-    # Clean the transcript if needed
-    if cleaned_exists:
-        print(f"Cleaned transcript already exists at: {cleaned_path}")
-        # Read the cleaned transcript for segmentation
-        try:
-            with open(cleaned_path, 'r', encoding='utf-8') as f:
-                cleaned_transcript = f.read()
-        except UnicodeDecodeError:
-            with open(cleaned_path, 'r', encoding='latin-1') as f:
-                cleaned_transcript = f.read()
-    else:
-        # Clean the transcript
-        print("Cleaning transcript...")
-        cleaned_transcript = clean_transcript(transcript_text)
+    try:
+        print(f"Processing YouTube URL: {yt_url}")
         
-        # Save the cleaned transcript
-        with open(cleaned_path, 'w', encoding='utf-8') as f:
-            f.write(cleaned_transcript)
+        # Extract video ID for naming
+        video_id = extract_video_id(yt_url)
+        if not video_id:
+            print(f"Error: Could not extract video ID from URL: {yt_url}")
+            return False
         
-        print(f"Cleaned transcript saved to: {cleaned_path}")
-    
-    # Create segments if needed
-    if create_segments:
-        if segments_exist:
-            print(f"Segment files already exist in: {segments_folder}")
+        # Define file paths with new structure
+        transcript_folder = os.path.join(output_folder, 'transcript')
+        original_path = os.path.join(transcript_folder, "transcript_original.vtt")
+        cleaned_path = os.path.join(transcript_folder, "transcript_cleaned.vtt")
+        segments_folder = os.path.join(output_folder, 'segments', 'input')
+        
+        # Create necessary folders
+        os.makedirs(transcript_folder, exist_ok=True)
+        
+        # Check if transcript files already exist
+        original_exists = os.path.exists(original_path)
+        cleaned_exists = os.path.exists(cleaned_path)
+        segments_exist = os.path.exists(segments_folder) and any(
+            f.startswith(f"segment_") and f.endswith(".txt") 
+            for f in os.listdir(segments_folder)
+        ) if os.path.exists(segments_folder) else False
+        
+        # Download or use existing transcript
+        if original_exists:
+            print(f"Original transcript already exists at: {original_path}")
+            # Read the existing transcript
+            try:
+                with open(original_path, 'r', encoding='utf-8') as f:
+                    transcript_text = f.read()
+            except UnicodeDecodeError:
+                # Try another encoding if utf-8 fails
+                with open(original_path, 'r', encoding='latin-1') as f:
+                    transcript_text = f.read()
         else:
-            print("Creating segmented transcript files...")
-            segment_transcript(cleaned_transcript, output_folder, max_lines_per_segment)
-    
-    print(f"Transcript processing completed for video ID: {video_id}")
+            # Download the transcript
+            downloaded_path, transcript_text = download_transcript(yt_url, output_folder)
+            if not transcript_text:
+                print("Failed to download transcript.")
+                return False
+        
+        # Clean the transcript if needed
+        if cleaned_exists:
+            print(f"Cleaned transcript already exists at: {cleaned_path}")
+            # Read the cleaned transcript for segmentation
+            try:
+                with open(cleaned_path, 'r', encoding='utf-8') as f:
+                    cleaned_transcript = f.read()
+            except UnicodeDecodeError:
+                with open(cleaned_path, 'r', encoding='latin-1') as f:
+                    cleaned_transcript = f.read()
+        else:
+            # Clean the transcript
+            print("Cleaning transcript...")
+            cleaned_transcript = clean_transcript(transcript_text)
+            
+            # Save the cleaned transcript
+            with open(cleaned_path, 'w', encoding='utf-8') as f:
+                f.write(cleaned_transcript)
+            
+            print(f"Cleaned transcript saved to: {cleaned_path}")
+        
+        # Create segments if needed
+        if create_segments:
+            if segments_exist:
+                print(f"Segment files already exist in: {segments_folder}")
+            else:
+                print("Creating segmented transcript files...")
+                segment_transcript(cleaned_transcript, output_folder, max_lines_per_segment)
+        
+        print(f"Transcript processing completed for video ID: {video_id}")
+        return True
+        
+    except Exception as e:
+        print(f"Error processing YouTube URL: {str(e)}")
+        return False
 
 
 def main():
     parser = argparse.ArgumentParser(description="Download and clean YouTube video transcripts using yt-dlp")
     parser.add_argument("yt_url", help="YouTube video URL")
-    parser.add_argument("--output_folder", "-o", 
-                        help="Folder to save transcripts (default: 'transcript_output')",
-                        default="transcript_output")
-    parser.add_argument("--no-segments", action="store_true",
-                        help="Skip creating segmented transcript files")
-    parser.add_argument("--lines-per-segment", type=int, default=500,
-                        help="Maximum number of lines per segment (default: 500)")
-    
+    parser.add_argument("--output_folder", "-o", help="Folder to save transcripts (default: 'transcript_output')", default="transcript_output")
+    parser.add_argument("--no-segments", action="store_true", help="Skip creating segmented transcript files")
+    parser.add_argument("--lines-per-segment", type=int, default=500, help="Maximum number of lines per segment (default: 500)")
     args = parser.parse_args()
     
     # Process the YouTube URL

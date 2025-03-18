@@ -5,15 +5,8 @@ import argparse
 import time
 import yt_dlp
 
-def format_bytes(bytes):
-    """
-    Format bytes to human-readable format
-    """
-    for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
-        if bytes < 1024.0:
-            return f"{bytes:.2f} {unit}"
-        bytes /= 1024.0
-    return f"{bytes:.2f} PB"
+from utils.size_format import format_bytes
+from utils.time_format import format_time
 
 class DownloadLogger:
     """
@@ -85,7 +78,19 @@ def progress_hook(d):
         # Download finished
         elapsed = time.time() - progress_hook.start_time
         sys.stdout.write("\n")
-        print(f"Download completed in {elapsed:.2f} seconds")
+        print(f"Download completed in {format_time(elapsed)}")
+    
+    elif d['status'] == 'processing':
+        # Post-processing or merging
+        _percent = d.get('_percent_str', '')
+        _eta = d.get('_eta_str', '')
+        
+        if _percent and _eta:
+            sys.stdout.write(f"\rMerging video and audio: {_percent} ETA: {_eta}")
+            sys.stdout.flush()
+        else:
+            sys.stdout.write(f"\rMerging video and audio... please wait")
+            sys.stdout.flush()
 
 # Initialize start_time
 progress_hook.start_time = time.time()
@@ -112,10 +117,13 @@ def download_video(youtube_url, output_file):
         
         print(f"Fetching video information from: {youtube_url}")
         
+        # Remove file extension and let yt-dlp handle it to avoid double extension
+        output_template = os.path.splitext(output_file)[0]
+        
         # Setup yt-dlp options
         ydl_opts = {
             'format': 'bestvideo+bestaudio/best',  # Best quality video and audio
-            'outtmpl': output_file,  # Output file template
+            'outtmpl': output_template,  # Output file template without extension
             'logger': DownloadLogger(),
             'progress_hooks': [progress_hook],
             'quiet': True,  # Suppress standard output
@@ -126,6 +134,7 @@ def download_video(youtube_url, output_file):
                 'key': 'FFmpegVideoConvertor',
                 'preferedformat': 'mp4',  # Convert to mp4
             }],
+            'merge_output_format': 'mp4',  # Ensure output is mp4
         }
         
         # Reset the start time for speed calculation
@@ -136,7 +145,17 @@ def download_video(youtube_url, output_file):
             info = ydl.extract_info(youtube_url, download=False)
             print(f"Downloading video: {info.get('title', 'Unknown title')}")
             print(f"Quality: Best available")
+            start_time = time.time()
             ydl.download([youtube_url])
+            total_time = time.time() - start_time
+        
+        print(f"\nVideo download and processing completed in {format_time(total_time)}")
+        
+        # Ensure the file exists with the correct extension
+        expected_file = f"{output_template}.mp4"
+        if os.path.exists(expected_file) and expected_file != output_file:
+            os.rename(expected_file, output_file)
+            print(f"Renamed output file to {os.path.basename(output_file)}")
         
         print("Download completed successfully!")
         return True
@@ -145,6 +164,25 @@ def download_video(youtube_url, output_file):
         print(f"\nError downloading video: {str(e)}")
         return False
 
+def process_video(youtube_url, output_file=None):
+    """
+    Main function to process a YouTube video download request
+    
+    Args:
+        youtube_url: URL of the YouTube video to download
+        output_file: Path to save the downloaded video (optional)
+        
+    Returns:
+        bool: True if download was successful, False otherwise
+    """
+    # Set default output path if not provided
+    if not output_file:
+        os.makedirs("output/video_output", exist_ok=True)
+        output_file = os.path.join("output/video_output", "video.mp4")
+    
+    # Download the video
+    return download_video(youtube_url, output_file)
+
 def main():
     parser = argparse.ArgumentParser(description="Download YouTube videos in best quality")
     parser.add_argument("--youtube-url", required=True, help="URL of the YouTube video to download")
@@ -152,14 +190,8 @@ def main():
     
     args = parser.parse_args()
     
-    # Set default output path if not provided
-    output_file = args.output_file
-    if not output_file:
-        os.makedirs("output/video_output", exist_ok=True)
-        output_file = os.path.join("output/video_output", "video.mp4")
-    
-    # Download the video
-    download_video(args.youtube_url, output_file)
+    # Process the video
+    process_video(args.youtube_url, args.output_file)
 
 if __name__ == "__main__":
     main()

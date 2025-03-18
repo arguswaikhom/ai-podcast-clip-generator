@@ -280,8 +280,7 @@ def main():
     parser.add_argument("--output_folder", "-o", help="Path to output folder (optional)")
     parser.add_argument("--width", type=int, default=1080, help="Output width (default: 1080)")
     parser.add_argument("--height", type=int, default=1920, help="Output height (default: 1920)")
-    parser.add_argument("--extensions", nargs="+", default=[".mp4", ".avi", ".mov", ".mkv", ".webm"],
-                        help="Video file extensions to process (default: .mp4 .avi .mov .mkv .webm)")
+    parser.add_argument("--extensions", nargs="+", default=[".mp4", ".avi", ".mov", ".mkv", ".webm"], help="Video file extensions to process (default: .mp4 .avi .mov .mkv .webm)")
     args = parser.parse_args()
     
     # Validate input folder
@@ -303,13 +302,16 @@ def main():
         print(f"Created output directory: {output_folder}")
     
     # Find all video files in the input folder
-    video_files = []
+    video_files = set()  # Changed from list to set to ensure uniqueness
     for ext in args.extensions:
         pattern = os.path.join(args.input_folder, f"*{ext}")
-        video_files.extend(glob.glob(pattern))
+        video_files.update(glob.glob(pattern))
         # Also search for uppercase extensions
         pattern = os.path.join(args.input_folder, f"*{ext.upper()}")
-        video_files.extend(glob.glob(pattern))
+        video_files.update(glob.glob(pattern))
+    
+    # Convert set back to sorted list for consistent display
+    video_files = sorted(list(video_files))
     
     if not video_files:
         print(f"No video files found in {args.input_folder} with extensions {args.extensions}")
@@ -327,18 +329,16 @@ def main():
         input_basename = os.path.basename(video_file)
         input_name, input_ext = os.path.splitext(input_basename)
         
-        # Default output filename
-        output_filename = f"{input_name}_vertical{input_ext}"
+        # Use the same filename without _vertical suffix
+        output_filename = f"{input_name}{input_ext}"
         output_path = os.path.join(output_folder, output_filename)
         
-        # Check if file already exists, append counter if needed
-        counter = 1
-        while os.path.exists(output_path):
-            output_filename = f"{input_name}_vertical_{counter}{input_ext}"
-            output_path = os.path.join(output_folder, output_filename)
-            counter += 1
+        # Skip if file already exists
+        if os.path.exists(output_path):
+            print(f"\nSkipping {input_basename} - output file already exists")
+            continue
         
-        print(f"\nProcessing video {input_basename} -> {output_filename}")
+        print(f"\nProcessing video {input_basename}")
         
         try:
             # Process video

@@ -3,6 +3,7 @@ import argparse
 import whisper
 import time
 import json
+import sys
 from tqdm import tqdm
 
 class SubtitleGenerator:
@@ -197,66 +198,103 @@ class SubtitleGenerator:
         
         return f"{hours:02d}:{minutes:02d}:{int(seconds):02d},{milliseconds:03d}"
 
+def process_folder(input_folder, output_folder=None, generate_word_timings=False, model_name="base", max_words=12, extensions=None):
+    """
+    Process all videos in a folder to generate subtitles.
+    
+    Args:
+        input_folder: Path to folder containing video files
+        output_folder: Path to output folder for subtitles (default: subtitle_output)
+        generate_word_timings: Whether to generate word-level timing data
+        model_name: Whisper model to use (default: base)
+        max_words: Maximum number of words per subtitle (default: 12)
+        extensions: List of video file extensions to process
+        
+    Returns:
+        bool: True if at least one video was processed successfully, False otherwise
+    """
+    try:
+        # Set up the output folder - in the same directory as the script
+        if output_folder is None:
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            output_folder = os.path.join(script_dir, "subtitle_output")
+        
+        # Create output directory if it doesn't exist
+        os.makedirs(output_folder, exist_ok=True)
+        print(f"Output directory: {output_folder}")
+        
+        # Set default extensions if None
+        if extensions is None:
+            extensions = [".mp4", ".avi", ".mov", ".mkv", ".webm"]
+        
+        # Initialize the subtitle generator
+        subtitle_generator = SubtitleGenerator(model_name=model_name, max_words_per_subtitle=max_words)
+        
+        # Get list of video files in the input directory
+        video_files = []
+        for root, _, files in os.walk(input_folder):
+            for file in files:
+                if any(file.lower().endswith(ext) for ext in extensions):
+                    video_files.append(os.path.join(root, file))
+        
+        if not video_files:
+            print(f"No video files found in {input_folder} with extensions {extensions}")
+            return False
+        
+        print(f"Found {len(video_files)} video files to process.")
+        
+        # Process each video file
+        successful_videos = 0
+        for video_path in tqdm(video_files, desc="Generating subtitles"):
+            # Determine output subtitle path
+            video_name = os.path.basename(video_path)
+            base_name, _ = os.path.splitext(video_name)
+            subtitle_path = os.path.join(output_folder, f"{base_name}.srt")
+            
+            # Check if subtitle already exists
+            if os.path.exists(subtitle_path):
+                print(f"Subtitle already exists for {video_name}, skipping.")
+                successful_videos += 1
+                continue
+            
+            # Generate subtitle
+            if subtitle_generator.generate_subtitle(video_path, subtitle_path, generate_word_timings=generate_word_timings):
+                successful_videos += 1
+        
+        print(f"Subtitle generation completed. Successfully processed {successful_videos}/{len(video_files)} videos.")
+        return successful_videos > 0
+        
+    except Exception as e:
+        print(f"Error processing folder: {str(e)}")
+        return False
+
 def main():
     parser = argparse.ArgumentParser(description="Generate subtitles for videos using OpenAI's Whisper")
     parser.add_argument("input_folder", help="Path to folder containing video files")
-    parser.add_argument("--model", choices=["tiny", "base", "small", "medium", "large"], 
-                        default="base", help="Whisper model to use (default: base)")
-    parser.add_argument("--output_folder", help="Path to output folder for subtitles (default: subtitle_output)",
-                        default=None)
-    parser.add_argument("--max_words", type=int, default=8,
-                        help="Maximum number of words per subtitle (default: 12)")
-    parser.add_argument("--word_timings", action="store_true",
-                        help="Generate word-level timing data for highlighting")
-    parser.add_argument("--extensions", nargs="+", 
-                        default=[".mp4", ".avi", ".mov", ".mkv", ".webm"],
-                        help="Video file extensions to process (default: .mp4 .avi .mov .mkv .webm)")
+    parser.add_argument("--model", choices=["tiny", "base", "small", "medium", "large"], default="base", help="Whisper model to use (default: base)")
+    parser.add_argument("--output_folder", help="Path to output folder for subtitles (default: subtitle_output)", default=None)
+    parser.add_argument("--max_words", type=int, default=8, help="Maximum number of words per subtitle (default: 12)")
+    parser.add_argument("--word_timings", action="store_true", help="Generate word-level timing data for highlighting")
+    parser.add_argument("--extensions", nargs="+", default=[".mp4", ".avi", ".mov", ".mkv", ".webm"], help="Video file extensions to process (default: .mp4 .avi .mov .mkv .webm)")
     args = parser.parse_args()
     
-    # Set up the output folder - in the same directory as the script
-    if args.output_folder is None:
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        output_folder = os.path.join(script_dir, "subtitle_output")
-    else:
-        output_folder = args.output_folder
+    # Process videos
+    start_time = time.time()
+    success = process_folder(
+        args.input_folder, 
+        args.output_folder,
+        args.word_timings,
+        args.model,
+        args.max_words,
+        args.extensions
+    )
+    end_time = time.time()
     
-    # Create output directory if it doesn't exist
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
-        print(f"Created output directory: {output_folder}")
+    print(f"Total processing time: {end_time - start_time:.2f} seconds")
     
-    # Initialize the subtitle generator
-    subtitle_generator = SubtitleGenerator(model_name=args.model, max_words_per_subtitle=args.max_words)
-    
-    # Get list of video files in the input directory
-    video_files = []
-    for root, _, files in os.walk(args.input_folder):
-        for file in files:
-            if any(file.lower().endswith(ext) for ext in args.extensions):
-                video_files.append(os.path.join(root, file))
-    
-    if not video_files:
-        print(f"No video files found in {args.input_folder} with extensions {args.extensions}")
-        return
-    
-    print(f"Found {len(video_files)} video files to process.")
-    
-    # Process each video file
-    for video_path in tqdm(video_files, desc="Generating subtitles"):
-        # Determine output subtitle path
-        video_name = os.path.basename(video_path)
-        base_name, _ = os.path.splitext(video_name)
-        subtitle_path = os.path.join(output_folder, f"{base_name}.srt")
-        
-        # Check if subtitle already exists
-        if os.path.exists(subtitle_path):
-            print(f"Subtitle already exists for {video_name}, skipping.")
-            continue
-        
-        # Generate subtitle
-        subtitle_generator.generate_subtitle(video_path, subtitle_path, generate_word_timings=args.word_timings)
-    
-    print("Subtitle generation completed.")
+    if not success:
+        print("No subtitles were generated successfully.")
+        sys.exit(1)
 
 if __name__ == "__main__":
     start_time = time.time()
