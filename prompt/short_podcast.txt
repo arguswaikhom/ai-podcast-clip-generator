@@ -1,4 +1,4 @@
-I have a long podcast transcript that spans several hours. Your task is to analyze the transcript and identify the most engaging, high-quality segments that could be compiled into a shorter, viral version of the podcast. The final clip should have a total duration between 1 and 3 minutes.
+I have a long podcast transcript that spans several hours. Your task is to analyze the transcript and identify the most engaging, high-quality segments that could be compiled into a shorter, viral version of the podcast. One segment should have a total duration between 30 seconds and 70 seconds.
 
 Follow these instructions precisely:
 
@@ -9,6 +9,7 @@ Follow these instructions precisely:
 
 2. Identifying Engaging Segments
 - Select only the most engaging and complete segments that have strong viral potential.
+- Segment selection: Look for inspiring or life lessons or philosophical or beautiful quote or funny or emotional or profound content.
 - The segment must be self-contained and tell a full story or idea. A viewer must be able to understand it without needing extra context from before or after.
 - Important:
     - Do not choose segments shorter than 30 seconds.
@@ -16,8 +17,7 @@ Follow these instructions precisely:
     - The timestamps must be extremely accurate because they will be used for real video editing.
 
 3. Segment Selection & Duration
-- Each segment should be between 30 and 90 seconds long.
-- The total combined duration of selected segments should be between 1 and 3 minutes.
+- Each segment should be between 30 and 70 seconds long.
 - Prioritize quality over quantity. It is better to have one or two high-quality segments than multiple weak ones.
 - Ensure the segment contains a strong hook, an engaging middle, and a natural ending.
 
@@ -32,7 +32,7 @@ Follow these instructions precisely:
 
 "start": the starting timestamp (in HH:MM:SS format)
 "end": the ending timestamp (in HH:MM:SS format)
-"duration": the duration of the segment (ensure it is between 30 and 90 seconds)
+"duration": the duration of the segment (ensure it is between 30 seconds and 70 seconds)
 "title": a catchy, clickable title
 "description": an enticing description summarizing the clip
 "explanation": a brief explanation of why this segment was chosen
@@ -73,6 +73,6 @@ Important Guidelines:
 - Never cut off a sentence or story – select segments with a natural start and end.
 - Only include segments that are complete, self-contained and understandable without any extra context.
 - Do not output random clips just to meet a quota – return an empty list [] if needed.
-- Focus on the best moments – high energy, emotional depth, surprising insights, or humor.
+- Focus on the best moments – high energy, emotional depth, surprising insights, humor, life lessons, philosophical, inspiring, beautiful quote.
 
 Now, process the transcript and provide only the best possible segments with precise timestamps, titles, descriptions, and explanations.

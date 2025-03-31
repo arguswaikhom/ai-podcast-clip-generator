@@ -52,7 +52,7 @@ def run_podcast_clipper(youtube_urls: list):
 
         # Run the suggested video clipper
         yt_clip_folder = folders[OutputFolder.VIDEO_CLIPS]
-        video_clipper_command = f"{python_path} video_suggestion_clipper.py {downloaded_yt_video_file} {suggestion_json_file} {yt_clip_folder} --remove-silence"
+        video_clipper_command = f"{python_path} video_suggestion_clipper.py {downloaded_yt_video_file} {suggestion_json_file} {yt_clip_folder} --remove-silence --start-ms 0 --end-ms 3000"
         execute_command(f"(Video {i} - 4/7) Clipping video", video_clipper_command)
 
         # Run the vertical video converter
@@ -67,9 +67,10 @@ def run_podcast_clipper(youtube_urls: list):
 
         # Attach subtitles to the vertical video
         subtitled_video_folder = folders[OutputFolder.SUBTITLED_CLIPS]
-        highlight_style = "standard" # "bigword"
+        highlight_style = "bigword" # "bigword"
         animation_style = "scale" # "bounce"
-        subtitled_video_converter_command = f"{python_path} video_subtitle_embedder.py {vertical_video_folder} {clip_subtitles_folder} --output_folder {subtitled_video_folder} --highlight {highlight_style} --animation {animation_style}"
+        subtitled_video_converter_command = f"{python_path} video_subtitle_embedder.py {vertical_video_folder} {clip_subtitles_folder} --output_folder {subtitled_video_folder}"
+        # subtitled_video_converter_command = f"{python_path} video_subtitle_embedder.py {vertical_video_folder} {clip_subtitles_folder} --output_folder {subtitled_video_folder} --highlight {highlight_style} --animation {animation_style}"
         execute_command(f"(Video {i} - 7/7) Attaching subtitles", subtitled_video_converter_command)
 
         # Calculate and display time taken for this video
@@ -88,15 +89,38 @@ def run_podcast_clipper(youtube_urls: list):
 
 if __name__ == "__main__":
     youtube_urls = [
-        "https://www.youtube.com/watch?v=ZPUtA3W-7_I", # Narendra Modi: Prime Minister of India - Power, Democracy, War & Peace | Lex Fridman Podcast #460
-        "https://www.youtube.com/watch?v=f_lRdkH_QoY", # Tucker Carlson: Putin, Navalny, Trump, CIA, NSA, War, Politics & Freedom | Lex Fridman Podcast #414
-        "https://www.youtube.com/watch?v=oFfVt3S51T4", # Cursor Team: Future of Programming with AI | Lex Fridman Podcast #447
-        "https://www.youtube.com/watch?v=sSOxPJD-VNo", # Joe Rogan Experience #2281 - Elon Musk
-        "https://www.youtube.com/watch?v=sY8aFSY2zv4", # Jordan Peterson: Life, Death, Power, Fame, and Meaning | Lex Fridman Podcast #313
-        "https://www.youtube.com/watch?v=T3FC7qIAGZk", # Andrew Bustamante: CIA Spy | Lex Fridman Podcast #310
-        "https://www.youtube.com/watch?v=JN3KPFbWCy8", # Elon Musk: War, AI, Aliens, Politics, Physics, Video Games, and Humanity | Lex Fridman Podcast #400
-        "https://www.youtube.com/watch?v=3qHkcs3kG44", # Joe Rogan Experience #1309 - Naval Ravikant
-        "https://www.youtube.com/watch?v=q8VePUwjB9Y", # Jordan Peterson: Nietzsche, Hitler, God, Psychopathy, Suffering & Meaning | Lex Fridman Podcast #448
-        "https://www.youtube.com/watch?v=BEWz4SXfyCQ", # Joe Rogan Experience #1315 - Bob Lazar & Jeremy Corbell
+        # "https://www.youtube.com/watch?v=wMW7-yk296U" # MrBeast Crashed Our Mark Zuckerberg Interview
+
+
+        # "https://www.youtube.com/watch?v=iVl5FLRuGXI" # How To Take Control Of Your Own Destiny - George Mack
+        # "https://www.youtube.com/watch?v=ITxbwgyGh6w", # The Art Of Effortless Confidence & Social Persuasion - Vanessa Van Edwards
+        # "https://www.youtube.com/watch?v=wmU7VVxhERw", # Why Modern Women Feel More Lost Than Ever - Freya India
+
+        # "https://www.youtube.com/watch?v=PYRYXhU4kxM", # Eric Weinstein - We Might Be On The Brink Of A Revolution (4K)
+        # "https://www.youtube.com/watch?v=WO5m-roVzjg", # "Distraction Is The Biggest Threat To Your Future" - Alex Hormozi (4K)
+        # "https://www.youtube.com/watch?v=k86n1HQ-yO4", # Tulsi Gabbard - The Silent War Over Who Controls America
+        # "https://www.youtube.com/watch?v=Eu1kHIztT24", # The Hidden Art Of Reinventing Yourself - Matthew McConaughey (4K)
+        # "https://www.youtube.com/watch?v=LJxBnSyH0T4", # Eric Weinstein - Why No One Can Agree On The Truth Anymore (4K)
+        # "https://www.youtube.com/watch?v=p_swB_KS8Hw", # Eric Weinstein - Why The Modern World Makes No Sense (4K)
+        # "https://www.youtube.com/watch?v=M4PzOjM5BJQ", # 23 Harsh Truths Nobody Wants To Admit - Alex Hormozi (4K)
+        # "https://www.youtube.com/watch?v=WEP5ubPMGDU", # Jordan Peterson - How To Destroy Your Negative Beliefs (4K)
+        # "https://www.youtube.com/watch?v=31DMZLK_PPs", # Control Your Mind For Extreme Motivation And Focus - Andrew Huberman (4K)
+        # "https://www.youtube.com/watch?v=ngvOyccUzzY", # David Goggins - How To Break Free From Your Old Self (4K)
+        # "https://www.youtube.com/watch?v=laSK7Pxh0_8" # Jordan Peterson - Take Responsibility & Become Unbreakable
+
+
+        # "https://www.youtube.com/watch?v=tNZnLkRBYA8", # ThePrimeagen: Programming, AI, ADHD, Productivity, Addiction, and God | Lex Fridman Podcast #461
+        # "https://www.youtube.com/watch?v=MjhXtJB_ZbU", # Joe Rogan Experience #2293 - Chris Williamson
+
+        # "https://www.youtube.com/watch?v=ZPUtA3W-7_I", # Narendra Modi: Prime Minister of India - Power, Democracy, War & Peace | Lex Fridman Podcast #460
+        # "https://www.youtube.com/watch?v=f_lRdkH_QoY", # Tucker Carlson: Putin, Navalny, Trump, CIA, NSA, War, Politics & Freedom | Lex Fridman Podcast #414
+        # "https://www.youtube.com/watch?v=oFfVt3S51T4", # Cursor Team: Future of Programming with AI | Lex Fridman Podcast #447
+        # "https://www.youtube.com/watch?v=sSOxPJD-VNo", # Joe Rogan Experience #2281 - Elon Musk
+        # "https://www.youtube.com/watch?v=sY8aFSY2zv4", # Jordan Peterson: Life, Death, Power, Fame, and Meaning | Lex Fridman Podcast #313
+        # "https://www.youtube.com/watch?v=T3FC7qIAGZk", # Andrew Bustamante: CIA Spy | Lex Fridman Podcast #310
+        # "https://www.youtube.com/watch?v=JN3KPFbWCy8", # Elon Musk: War, AI, Aliens, Politics, Physics, Video Games, and Humanity | Lex Fridman Podcast #400
+        # "https://www.youtube.com/watch?v=3qHkcs3kG44", # Joe Rogan Experience #1309 - Naval Ravikant
+        # "https://www.youtube.com/watch?v=q8VePUwjB9Y", # Jordan Peterson: Nietzsche, Hitler, God, Psychopathy, Suffering & Meaning | Lex Fridman Podcast #448
+        # "https://www.youtube.com/watch?v=BEWz4SXfyCQ", # Joe Rogan Experience #1315 - Bob Lazar & Jeremy Corbell
     ]
     run_podcast_clipper(youtube_urls)
